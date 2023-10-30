@@ -260,7 +260,7 @@ class RenderingNetwork(nn.Module):
             dims[0] += (input_ch - 3)
         elif self.encoding=="sphere_harmonics_tcnn":
             self.embedview_fn = tcnn.Encoding(
-            n_input_dims=d_in,
+            n_input_dims=3,
             encoding_config={
                 "otype": "SphericalHarmonics",
                 "degree": degree,
