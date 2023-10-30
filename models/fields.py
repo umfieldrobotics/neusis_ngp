@@ -116,7 +116,7 @@ class SDFNetworkTcnn(nn.Module):
     def forward_with_nablas(self, x, bound=1):
         with torch.enable_grad():
             x = x.requires_grad_(True)
-            sdf = self.forward(x)
+            sdf = self.forward(x, bound=bound)
             nablas = torch.autograd.grad(
                 sdf[:, :1],
                 x,
