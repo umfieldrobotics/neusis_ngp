@@ -145,7 +145,8 @@ class Runner:
         self.coords_all = list(self.coords_all_set - set(self.del_coords))
         self.coords_all = torch.LongTensor(self.coords_all).to(self.device)
 
-        self.criterion = torch.nn.L1Loss(reduction='sum')
+        # self.criterion = torch.nn.L1Loss(reduction='sum')
+        self.criterion = torch.nn.HuberLoss(reduction='sum')
         
         self.model_list = []
         self.writer = None
