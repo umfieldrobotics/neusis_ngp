@@ -17,7 +17,7 @@ import time
 import random
 import string 
 from pyhocon import ConfigFactory
-from models.fields import RenderingNetwork, SDFNetwork, SingleVarianceNetwork, NeRF
+from models.fields import RenderingNetwork, SDFNetwork, SingleVarianceNetwork, NeRF, SDFNetworkTcnn
 from models.renderer import NeuSRenderer
 import trimesh
 from itertools import groupby
@@ -152,7 +152,8 @@ class Runner:
 
         # Networks
         params_to_train = []
-        self.sdf_network = SDFNetwork(**self.conf['model.sdf_network']).to(self.device)
+        # self.sdf_network = SDFNetwork(**self.conf['model.sdf_network']).to(self.device)
+        self.sdf_network = SDFNetworkTcnn(**self.conf['model.sdf_network']).to(self.device)
 
         self.deviation_network = SingleVarianceNetwork(**self.conf['model.variance_network']).to(self.device)
         self.color_network = RenderingNetwork(**self.conf['model.rendering_network']).to(self.device)
@@ -160,7 +161,7 @@ class Runner:
         params_to_train += list(self.deviation_network.parameters())
         params_to_train += list(self.color_network.parameters())
 
-        self.optimizer = torch.optim.Adam(params_to_train, lr=self.learning_rate)
+        self.optimizer = torch.optim.Adam(params_to_train, lr=self.learning_rate, betas=(0.9, 0.99), eps=1e-15)
 
 
         self.iter_step = 0
@@ -298,7 +299,8 @@ class Runner:
                 self.save_checkpoint()
 
             if i % self.report_freq == 0:
-                print('iter:{:8>d} "Loss={} | intensity Loss={} " | eikonal loss={} | total variation loss = {} | lr={}'.format(self.iter_step, l, iL, eikL, varL, self.optimizer.param_groups[0]['lr']))
+                print('iter:{:8>d} "Loss={} | intensity Loss={} " | eikonal loss={} | total variation loss = {} | lr={} | inv_s={}'.format(
+                        self.iter_step, l, iL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(self.deviation_network.variance.item()*10) ) )
 
             if i == 0 or i % self.val_mesh_freq == 0:
                 self.validate_mesh(threshold = self.level_set)

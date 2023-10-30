@@ -5,6 +5,131 @@ import numpy as np
 from models.embedder import get_embedder
 import sys
 
+import tinycudann as tcnn
+from numpy import log2, exp2
+
+# This implementation is borrowed from Instant-NSR: https://github.com/zhaofuq/Instant-NSR
+class SDFNetworkTcnn(nn.Module):
+    def __init__(self,
+                 d_in,
+                 d_out,
+                 d_hidden,
+                 n_layers,
+                 encoding="hashgrid_tcnn",
+                 degree=3,
+                 skip_in=[],
+                 multires=0,
+                 bias=0.5,
+                 scale=1,
+                 desired_resolution=1024,
+                 log2_hashmap_size=19,
+                 geometric_init=True,
+                 weight_norm=True,
+                 inside_outside=False):
+        super(SDFNetworkTcnn, self).__init__()
+        self.scale = scale
+        self.include_input=True
+        self.n_layers=n_layers
+
+        per_level_scale = exp2(log2(desired_resolution / 16) / (16 - 1))
+        if encoding=="frequency":
+            self.encoder, input_ch = get_embedder(multires, input_dims=d_in)
+            
+        elif encoding=="hashgrid_tcnn":
+            self.encoder = tcnn.Encoding(
+                n_input_dims=d_in,
+                encoding_config={
+                    "otype": "HashGrid",
+                    "n_levels": 16,
+                    "n_features_per_level": 2,
+                    "log2_hashmap_size": log2_hashmap_size,
+                    "base_resolution": 16,
+                    "per_level_scale": per_level_scale,
+                },
+            )
+            input_ch = self.encoder.n_output_dims
+        else:
+            raise NotImplementedError()
+
+        
+
+
+        sdf_net = []
+        for l in range(n_layers):
+            if l == 0:
+                in_dim = input_ch + d_in if self.include_input else input_ch
+  
+            else:
+                in_dim = d_hidden
+            
+            if l == n_layers - 1:
+                out_dim = d_out
+            else:
+                out_dim = d_hidden
+            
+            sdf_net.append(nn.Linear(in_dim, out_dim))
+
+            if geometric_init:
+                if l == n_layers - 1:
+                    torch.nn.init.normal_(sdf_net[l].weight, mean=np.sqrt(np.pi) / np.sqrt(in_dim), std=0.0001)
+                    torch.nn.init.constant_(sdf_net[l].bias, -bias)     
+
+                elif l==0:
+                    if self.include_input:
+                        torch.nn.init.constant_(sdf_net[l].bias, 0.0)
+                        torch.nn.init.normal_(sdf_net[l].weight[:, :3], 0.0, np.sqrt(2) / np.sqrt(out_dim))
+                        torch.nn.init.constant_(sdf_net[l].weight[:, 3:], 0.0)
+                    else:
+                        torch.nn.init.constant_(sdf_net[l].bias, 0.0)
+                        torch.nn.init.normal_(sdf_net[l].weight[:, :], 0.0, np.sqrt(2) / np.sqrt(out_dim))
+
+                else:
+                    torch.nn.init.constant_(sdf_net[l].bias, 0.0)
+                    torch.nn.init.normal_(sdf_net[l].weight[:, :], 0.0, np.sqrt(2) / np.sqrt(out_dim))
+
+            if weight_norm:
+                sdf_net[l] = nn.utils.weight_norm(sdf_net[l])
+
+        self.sdf_net = nn.ModuleList(sdf_net)
+        self.activation = nn.Softplus(beta=100)
+
+    
+  
+
+    def forward(self, inputs, bound=1):
+
+        inputs = inputs * self.scale
+        inputs = inputs.clamp(-bound, bound)
+
+        inputs = (inputs + bound)/(2*bound)
+        h = self.encoder(inputs).to(dtype=torch.float)
+        if self.include_input:
+            h = torch.cat([inputs, h], dim=-1)
+        for l in range(self.n_layers):
+            h = self.sdf_net[l](h)
+            if l != self.n_layers - 1:
+                h = self.activation(h)
+        sdf_output = h
+        return sdf_output
+
+    # https://gist.github.com/ventusff/57f47588eaff5f8b77a382260e7da8a3
+    def forward_with_nablas(self, x, bound=1):
+        with torch.enable_grad():
+            x = x.requires_grad_(True)
+            sdf = self.forward(x)
+            nablas = torch.autograd.grad(
+                sdf[:, :1],
+                x,
+                torch.ones_like(sdf[:, :1], device=x.device),
+                create_graph=True,
+                retain_graph=True,
+                only_inputs=True)[0]            
+        return sdf, nablas
+
+    def sdf(self, x):
+        return self.forward(x)[:, :1]
+
+
 # This implementation is borrowed from IDR: https://github.com/lioryariv/idr
 class SDFNetwork(nn.Module):
     def __init__(self,
@@ -106,7 +231,6 @@ class SDFNetwork(nn.Module):
             only_inputs=True)[0]
         return gradients.unsqueeze(1)
 
-
 # This implementation is borrowed from IDR: https://github.com/lioryariv/idr
 class RenderingNetwork(nn.Module):
     def __init__(self,
@@ -116,6 +240,9 @@ class RenderingNetwork(nn.Module):
                  d_out,
                  d_hidden,
                  n_layers,
+                 encoding="frequency",
+                 degree=3,
+                 scale=1,
                  weight_norm=True,
                  multires_view=0,
                  squeeze_out=True):
@@ -123,13 +250,26 @@ class RenderingNetwork(nn.Module):
 
         self.mode = mode
         self.squeeze_out = squeeze_out
+        self.scale = scale
+        self.encoding= encoding
         dims = [d_in + d_feature] + [d_hidden for _ in range(n_layers)] + [d_out]
 
         self.embedview_fn = None
-        if multires_view > 0:
-            embedview_fn, input_ch = get_embedder(multires_view)
-            self.embedview_fn = embedview_fn
+        if multires_view > 0 and self.encoding=="frequency":
+            self.embedview_fn, input_ch = get_embedder(multires_view)
             dims[0] += (input_ch - 3)
+        elif self.encoding=="sphere_harmonics_tcnn":
+            self.embedview_fn = tcnn.Encoding(
+            n_input_dims=d_in,
+            encoding_config={
+                "otype": "SphericalHarmonics",
+                "degree": degree,
+            },
+        )
+            input_ch = self.embedview_fn.n_output_dims
+            dims[0] += (input_ch - 3)
+        else:
+            raise NotImplementedError()
 
         self.num_layers = len(dims)
 
@@ -144,11 +284,22 @@ class RenderingNetwork(nn.Module):
 
         self.relu = nn.ReLU()
 
-    def forward(self, points, normals, view_dirs, feature_vectors):
+    def forward(self, points, normals, view_dirs, feature_vectors,bound=1):
         if self.embedview_fn is not None:
-            view_dirs = self.embedview_fn(view_dirs)
+
+            if self.encoding=="sphere_harmonics_tcnn":
+
+                view_dirs = (view_dirs + bound)/(2*bound)
+
+                view_dirs = view_dirs.clamp(0.0, 1.0)
+
+                view_dirs = self.embedview_fn(view_dirs).float()
+            else:
+                view_dirs = self.embedview_fn(view_dirs)
+
 
         rendering_input = None
+        points = points * self.scale
 
         if self.mode == 'idr':
             rendering_input = torch.cat([points, view_dirs, normals, feature_vectors], dim=-1)
@@ -161,7 +312,6 @@ class RenderingNetwork(nn.Module):
 
         for l in range(0, self.num_layers - 1):
             lin = getattr(self, "lin" + str(l))
-
             x = lin(x)
 
             if l < self.num_layers - 2:
@@ -170,6 +320,7 @@ class RenderingNetwork(nn.Module):
         if self.squeeze_out:
             x = torch.sigmoid(x)
         return x
+
 
 
 # This implementation is borrowed from nerf-pytorch: https://github.com/yenchenlin/nerf-pytorch

@@ -13,17 +13,18 @@ Ground Truth Mesh             |  Our Reconstruction    |      Volumetric Albedo 
 ## Anaconda Environment
   Create a virtual python environment using [Anaconda](https://www.anaconda.com/products/individual):
   ```
-  conda create -n neusis python=3.7
-  conda activate neusis
+  conda create -n neusis_ngp python=3
+  conda activate neusis_ngp
   ```
 
 ## Setup
 
-Install [PyTorch](https://pytorch.org/get-started/locally/) then:
 ``` shell
- git clone https://github.com/rpl-cmu/neusis.git
+ git clone https://github.com/xyp8023/neusis_ngp.git
  cd neusis
  pip install -r requirements.txt
+pip install git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+
 ```
 
 ## Data 

@@ -74,20 +74,22 @@ class NeuSRenderer:
                         ray_n_samples,
                         cos_anneal_ratio=0.0):
 
-        dirs_reshaped  = dirs.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
-        pts_reshaped = pts.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
-        dists_reshaped = dists.reshape(n_pixels, arc_n_samples, ray_n_samples, 1)
+        # dirs_reshaped  = dirs.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
+        # pts_reshaped = pts.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
+        # dists_reshaped = dists.reshape(n_pixels, arc_n_samples, ray_n_samples, 1)
 
-        pts_mid = pts_reshaped + dirs_reshaped * dists_reshaped/2
+        # pts_mid = pts_reshaped + dirs_reshaped * dists_reshaped/2
 
-        pts_mid = pts_mid.reshape(-1, 3)
+        # pts_mid = pts_mid.reshape(-1, 3)
 
-        sdf_nn_output = sdf_network(pts_mid)
+        # pts_mid = pts + dirs * dists.view(-1,1)/2 #(-1,3)
+        pts_mid = (pts + dirs * dists.view(-1,1)/2).contiguous() #(-1,3), for tcnn
+
+        sdf_nn_output, gradients = sdf_network.forward_with_nablas(pts_mid)
+
         sdf = sdf_nn_output[:, :1]
 
         feature_vector = sdf_nn_output[:, 1:]
-
-        gradients = sdf_network.gradient(pts_mid).squeeze()
 
 
 
@@ -98,10 +100,15 @@ class NeuSRenderer:
         inv_s = inv_s.expand(n_pixels*arc_n_samples*ray_n_samples, 1)
         true_cos = (dirs * gradients).sum(-1, keepdim=True)
 
+        activation  = nn.Softplus(beta=100)
+
+
         # "cos_anneal_ratio" grows from 0 to 1 in the beginning training iterations. The anneal strategy below makes
         # the cos value "not dead" at the beginning training iterations, for better convergence.
-        iter_cos = -(F.relu(-true_cos * 0.5 + 0.5) * (1.0 - cos_anneal_ratio) +
-                     F.relu(-true_cos) * cos_anneal_ratio)  # always non-positive
+        # iter_cos = -(F.relu(-true_cos * 0.5 + 0.5) * (1.0 - cos_anneal_ratio) +
+                    #  F.relu(-true_cos) * cos_anneal_ratio)  # always non-positive
+        iter_cos = -(activation(-true_cos * 0.5 + 0.5) * (1.0 - cos_anneal_ratio) +
+                    activation(-true_cos) * cos_anneal_ratio)  # always non-positive
 
         # Estimate signed distances at section points
 
@@ -132,7 +139,7 @@ class NeuSRenderer:
         summedIntensities = (intensityPointsOnArc*weights).sum(dim=1) 
 
         # Eikonal loss
-        gradients = gradients.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
+        # gradients = gradients.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
 
         gradient_error = (torch.linalg.norm(gradients, ord=2,
                                             dim=-1) - 1.0) ** 2
