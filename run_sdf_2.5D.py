@@ -62,6 +62,7 @@ class Runner:
         self.BN_rand = self.conf.get_int('train.num_select_beams') #H* BN_rand
 
         self.arc_n_samples = self.conf.get_int('train.arc_n_samples')
+        self.arc_n_samples_copy = self.arc_n_samples
         self.save_freq = self.conf.get_int('train.save_freq')
         self.report_freq = self.conf.get_int('train.report_freq')
         self.val_mesh_freq = self.conf.get_int('train.val_mesh_freq')
@@ -79,6 +80,7 @@ class Runner:
         self.intensity_weight = self.conf.get_float('train.intensity_weight')
 
         self.ray_n_samples = self.conf['model.neus_renderer']['n_samples']
+        self.ray_n_samples_copy = self.ray_n_samples
         self.base_exp_dir = './experiments/{}'.format(self.expID)
         self.randomize_points = self.conf.get_float('train.randomize_points')
         self.select_px_method = self.conf.get_string('train.select_px_method')
@@ -272,8 +274,8 @@ class Runner:
         heightmap_nn_plot = heightmap_nn.copy()
 
 
-        heightmap_gt[~mask]=np.nan
-        heightmap_nn[~mask]=np.nan
+        heightmap_gt_plot[~mask]=np.nan
+        heightmap_nn_plot[~mask]=np.nan
         diff = heightmap_gt_plot - heightmap_nn_plot
         mae = np.abs(diff)[~np.isnan(diff)].mean()
 
@@ -291,6 +293,11 @@ class Runner:
             sum_eikonal_loss = 0
             sum_total_variational = 0
             sum_bathymetric_loss = 0
+
+            # corse to fine:
+            progress = (self.iter_step - self.warm_up_end) / (self.end_iter - self.warm_up_end)
+            self.ray_n_samples = int(3**progress * self.ray_n_samples_copy)
+            self.arc_n_samples = int(4**progress * self.arc_n_samples_copy)
 
             for j in trange(0, len(i_train)):
                 img_i = i_train[j]
