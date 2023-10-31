@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from helpers import *
 from MLP import *
 #from PIL import Image
-import cv2 as cv
+# import cv2 as cv
 import time
 import random
 import string 

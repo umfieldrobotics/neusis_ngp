@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from helpers import *
 from MLP import *
 #from PIL import Image
-import cv2 as cv
+# import cv2 as cv
 import time
 import random
 import string 
@@ -388,7 +388,7 @@ class Runner:
 
             if i % self.report_freq == 0:
                 print('iter:{:8>d} "Loss={} | intensity Loss={} " | bathymetric loss={} | eikonal loss={} | total variation loss = {} | lr={} | inv_s={} | ray_n_samples={} | arc_n_samples={}'.format(
-                    self.iter_step, l, iL, bL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(10*self.deviation_network.variance.item())), self.ray_n_samples, self.arc_n_samples )
+                    self.iter_step, l, iL, bL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(10*self.deviation_network.variance.item()), self.ray_n_samples, self.arc_n_samples) )
 
             if i == 0 or i % self.val_mesh_freq == 0:
                 # self.validate_mesh(threshold = self.level_set)
