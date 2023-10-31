@@ -37,13 +37,15 @@ def config_parser():
 
 
 class Runner:
-    def __init__(self, conf, is_continue=False, write_config=True):
-        conf_path = conf
+    def __init__(self, args, write_config=True):
+        conf_path = args.conf
         f = open(conf_path)
         conf_text = f.read()
-        self.is_continue = is_continue
+        self.is_continue = args.is_continue
         self.conf = ConfigFactory.parse_string(conf_text)
         self.write_config = write_config
+        self.PC_name = args.PC_name
+        self.heightmap_name = args.heightmap_name
 
     def set_params(self):
         self.expID = self.conf.get_string('conf.expID') 
@@ -90,7 +92,8 @@ class Runner:
         self.level_set = self.conf.get_float('mesh.level_set')
         self.res = self.conf.get_float('mesh.res')
 
-        self.data = load_data(dataset)
+        self.data = load_data(dataset,self.PC_name,self.heightmap_name)
+
 
         self.H, self.W = self.data[self.image_setkeyname][0].shape
 
@@ -157,7 +160,9 @@ class Runner:
         self.criterion = torch.nn.HuberLoss(reduction='sum')
         
         self.model_list = []
-        self.writer = None
+        # self.writer = None
+        self.writer = SummaryWriter(log_dir=os.path.join(self.base_exp_dir, 'logs'))
+
 
         # Networks
         params_to_train = []
@@ -379,6 +384,7 @@ class Runner:
             if i == 0 or i % self.val_mesh_freq == 0:
                 # self.validate_mesh(threshold = self.level_set)
                 heightmap_nn, mae = self.export_heightmap_mae(mask_out=15)  # (-1,2)# numpy array 
+                os.makedirs(os.path.join(self.base_exp_dir, 'meshes'), exist_ok=True)
                 np.save(os.path.join(self.base_exp_dir, 'meshes', '{:0>8d}.npy'.format(self.iter_step)), heightmap_nn)
 
 
@@ -430,6 +436,8 @@ class Runner:
         else:
             return np.min([1.0, self.iter_step / self.anneal_end])
 
+    # def validate_heightmap(self):
+
     def validate_mesh(self, world_space=False, resolution=64, threshold=0.0):
         bound_min = torch.tensor(self.object_bbox_min, dtype=torch.float32)
         bound_max = torch.tensor(self.object_bbox_max, dtype=torch.float32)
@@ -456,10 +464,15 @@ if __name__=='__main__':
     parser.add_argument('--conf', type=str, default="./confs/conf.conf")
     parser.add_argument('--is_continue', default=False, action="store_true")
     parser.add_argument('--gpu', type=int, default=0)
+    parser.add_argument('--PC_name', type=str, default="PC.npy")
+    parser.add_argument('--heightmap_name', type=str, default="heightmap_gt.npy")
+
 
     args = parser.parse_args()
 
     torch.cuda.set_device(args.gpu)
-    runner = Runner(args.conf, args.is_continue)
+    # runner = Runner(args.conf, args.is_continue)
+    runner = Runner(args)
+
     runner.set_params()
     runner.train()
