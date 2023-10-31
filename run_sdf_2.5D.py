@@ -68,6 +68,8 @@ class Runner:
         self.val_mesh_freq = self.conf.get_int('train.val_mesh_freq')
         self.learning_rate = self.conf.get_float('train.learning_rate')
         self.learning_rate_alpha = self.conf.get_float('train.learning_rate_alpha')
+        self.learning_rate_decay_mode = self.conf.get_string('train.learning_rate_decay_mode')
+
         self.warm_up_end = self.conf.get_float('train.warm_up_end', default=0.0)
         self.anneal_end = self.conf.get_float('train.anneal_end', default=0.0)
         self.percent_select_true = self.conf.get_float('train.percent_select_true', default=0.5)
@@ -362,7 +364,7 @@ class Runner:
                     sum_bathymetric_loss+=sdf_err.cpu().numpy().item()
 
                 self.iter_step += 1
-                self.update_learning_rate()
+                self.update_learning_rate(self.learning_rate_decay_mode)
 
                 del(target)
                 del(target_s)
@@ -385,8 +387,8 @@ class Runner:
                 self.save_checkpoint()
 
             if i % self.report_freq == 0:
-                print('iter:{:8>d} "Loss={} | intensity Loss={} " | bathymetric loss={} | eikonal loss={} | total variation loss = {} | lr={} | inv_s={}'.format(
-                    self.iter_step, l, iL, bL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(10*self.deviation_network.variance.item())))
+                print('iter:{:8>d} "Loss={} | intensity Loss={} " | bathymetric loss={} | eikonal loss={} | total variation loss = {} | lr={} | inv_s={} | ray_n_samples={} | arc_n_samples={}'.format(
+                    self.iter_step, l, iL, bL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(10*self.deviation_network.variance.item())), self.ray_n_samples, self.arc_n_samples )
 
             if i == 0 or i % self.val_mesh_freq == 0:
                 # self.validate_mesh(threshold = self.level_set)
@@ -426,13 +428,18 @@ class Runner:
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.iter_step = checkpoint['iter_step']
 
-    def update_learning_rate(self):
+    def update_learning_rate(self, mode="cos"):
         if self.iter_step < self.warm_up_end:
             learning_factor = self.iter_step / self.warm_up_end
         else:
             alpha = self.learning_rate_alpha
             progress = (self.iter_step - self.warm_up_end) / (self.end_iter - self.warm_up_end)
-            learning_factor = (np.cos(np.pi * progress) + 1.0) * 0.5 * (1 - alpha) + alpha
+            if mode == "cos":
+                learning_factor = (np.cos(np.pi * progress) + 1.0) * 0.5 * (1 - alpha) + alpha
+            elif mode=="linear":
+                learning_factor = (1-alpha)** (progress*100)# (1-0.03)**100 ~ 0.05
+            else:
+                raise NotImplementedError
 
         for g in self.optimizer.param_groups:
             g['lr'] = self.learning_rate * learning_factor

@@ -1,17 +1,17 @@
 pyhocon==0.3.57
-torch-ema
-ninja
+# torch-ema
+# ninja
 trimesh
-opencv-python
+# opencv-python
 tensorboardX
 torch
 numpy 
-pandas
+# pandas
 tqdm
 matplotlib
 PyMCubes
 pyglet==1.5.28
 rich
-pysdf
+# pysdf
 dearpygui
 tensorboard
