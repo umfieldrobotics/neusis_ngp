@@ -252,9 +252,9 @@ class Runner:
         coords = torch.cat((coords, true_coords), dim=0)
             
         return coords, target
-    
-    def export_heightmap_mae(self, no_grad=True, mask_out=30):
-        heightmap_H = self.data["heightmap_init"].shape[0]
+        
+    def export_heightmap_mae(self, no_grad=True, mask_out=30, compute_mae=False):
+        heightmap_H = int((self.x_max-self.x_min)/self.res)
         coords = get_mgrid(heightmap_H) # cuda
         x = coords[:,0] * self.res + self.x_min
         y = coords[:,1] * self.res + self.y_min
@@ -272,25 +272,28 @@ class Runner:
         z = render_out["z"][:,0] + self.cube_center[2]
         
         heightmap_nn = z.view(heightmap_H,heightmap_H).detach().cpu().numpy()
-        heightmap_gt = self.data["heightmap_init"]
+        if compute_mae:
+            heightmap_gt = self.data["heightmap_init"]
 
-        mask = np.ones_like(heightmap_gt,dtype=bool) # invalid mask
-        # mask_out = 30 # meter
-        mask[:int(mask_out/self.res),:]=0
-        mask[heightmap_H-int(mask_out/self.res):,:]=0
-        mask[:,:int(mask_out/self.res)]=0
-        mask[:,heightmap_H-int(mask_out/self.res):]=0
-        heightmap_gt_plot = heightmap_gt.copy()
-        heightmap_nn_plot = heightmap_nn.copy()
-
-
-        heightmap_gt_plot[~mask]=np.nan
-        heightmap_nn_plot[~mask]=np.nan
-        diff = heightmap_gt_plot - heightmap_nn_plot
-        mae = np.abs(diff)[~np.isnan(diff)].mean()
+            mask = np.ones_like(heightmap_gt,dtype=bool) # invalid mask
+            # mask_out = 30 # meter
+            mask[:int(mask_out/self.res),:]=0
+            mask[heightmap_H-int(mask_out/self.res):,:]=0
+            mask[:,:int(mask_out/self.res)]=0
+            mask[:,heightmap_H-int(mask_out/self.res):]=0
+            heightmap_gt_plot = heightmap_gt.copy()
+            heightmap_nn_plot = heightmap_nn.copy()
 
 
-        return heightmap_nn, mae
+            heightmap_gt_plot[~mask]=np.nan
+            heightmap_nn_plot[~mask]=np.nan
+            diff = heightmap_gt_plot - heightmap_nn_plot
+            mae = np.abs(diff)[~np.isnan(diff)].mean()
+
+
+            return heightmap_nn, mae
+        else:
+            return heightmap_nn, 0
 
     def train(self):
         loss_arr = []
