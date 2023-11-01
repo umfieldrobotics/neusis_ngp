@@ -46,10 +46,15 @@ class Runner:
         self.write_config = write_config
         self.PC_name = args.PC_name
         self.heightmap_name = args.heightmap_name
+        self.slurm_id = args.slurm_id
+        self.load_slurm_id=args.load_slurm_id
+        self.base_dir = args.base_dir
+
         print(self.conf)
 
     def set_params(self):
-        self.expID = self.conf.get_string('conf.expID') 
+        self.expID = self.conf.get_string('conf.expID') + "_" + self.slurm_id
+        self.load_expID = self.conf.get_string('conf.expID') + "_" + self.load_slurm_id
 
         dataset = self.conf.get_string('conf.dataset')
         self.image_setkeyname =  self.conf.get_string('conf.image_setkeyname') 
@@ -84,7 +89,9 @@ class Runner:
 
         self.ray_n_samples = self.conf['model.neus_renderer']['n_samples']
         self.ray_n_samples_copy = self.ray_n_samples
-        self.base_exp_dir = './experiments/{}'.format(self.expID)
+        self.base_exp_dir = self.base_dir + '{}'.format(self.expID)
+        self.base_exp_dir_init = self.base_dir + '{}'.format(self.load_expID)
+
         self.randomize_points = self.conf.get_float('train.randomize_points')
         self.select_px_method = self.conf.get_string('train.select_px_method')
         self.select_valid_px = self.conf.get_bool('train.select_valid_px')        
@@ -128,20 +135,20 @@ class Runner:
 
         self.r_increments = torch.FloatTensor(r_increments).to(self.device)
 
-        extrapath = './experiments/{}'.format(self.expID)
+        extrapath = self.base_dir + '{}'.format(self.expID)
         if not os.path.exists(extrapath):
             os.makedirs(extrapath)
 
-        extrapath = './experiments/{}/checkpoints'.format(self.expID)
+        extrapath = self.base_dir +'{}/checkpoints'.format(self.expID)
         if not os.path.exists(extrapath):
             os.makedirs(extrapath)
 
-        extrapath = './experiments/{}/model'.format(self.expID)
+        extrapath = self.base_dir +'{}/model'.format(self.expID)
         if not os.path.exists(extrapath):
             os.makedirs(extrapath)
 
         if self.write_config:
-            with open('./experiments/{}/config.json'.format(self.expID), 'w') as f:
+            with open(self.base_dir +'{}/config.json'.format(self.expID), 'w') as f:
                 json.dump(self.conf.__dict__, f, indent = 2)
 
         # Create all image tensors beforehand to speed up process
@@ -483,6 +490,10 @@ if __name__=='__main__':
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--PC_name', type=str, default="PC.npy")
     parser.add_argument('--heightmap_name', type=str, default="heightmap_gt.npy")
+    parser.add_argument('--slurm_id', type=str, default="")
+    parser.add_argument('--load_slurm_id', type=str, default="")
+    parser.add_argument('--base_dir', type=str, default="./experiments/")
+
 
 
     args = parser.parse_args()
