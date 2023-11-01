@@ -6,8 +6,8 @@ import math
 from scipy.io import savemat
 import numpy as np
 
-def load_data(target,PC_name="PC.npy",heightmap_name="heightmap.npy"):
-    dirpath = "./data/{}".format(target)
+def load_data(target,base_dir="./",PC_name="PC.npy",heightmap_name="heightmap.npy"):
+    dirpath = base_dir+"data/{}".format(target)
     pickle_loc = "{}/Data".format(dirpath)
     output_loc = "{}/UnzipData".format(dirpath)
     cfg_path = "{}/Config.json".format(dirpath)
