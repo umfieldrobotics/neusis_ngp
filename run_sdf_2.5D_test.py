@@ -37,7 +37,7 @@ def config_parser():
 
 
 class Runner:
-    def __init__(self, args, write_config=True):
+    def __init__(self, args, write_config=False):
         conf_path = args.conf
         f = open(conf_path)
         conf_text = f.read()
@@ -285,130 +285,46 @@ class Runner:
 
         return heightmap_nn, mae
 
-    def train(self):
-        loss_arr = []
+    def render_sonar_image(self, j=0, step=1, idx_x_min=100):
+        i_train = np.arange(len(self.data[self.image_setkeyname]))
+        img_i = i_train[j]
+        target = self.data[self.image_setkeyname][img_i]# self.H,self.W
+        
+        pose = self.data["sensor_poses"][img_i] 
+        print(pose)
+        pred = np.zeros((self.H,self.W))
+        
 
-        for i in trange(self.start_iter, self.end_iter, len(self.data[self.image_setkeyname])):
-            i_train = np.arange(len(self.data[self.image_setkeyname]))
-            np.random.shuffle(i_train)
-            loss_total = 0
-            sum_intensity_loss = 0
-            sum_eikonal_loss = 0
-            sum_total_variational = 0
-            sum_bathymetric_loss = 0
-
-            # corse to fine:
-            progress = (self.iter_step - self.warm_up_end) / (self.end_iter - self.warm_up_end)
-            self.ray_n_samples = min(3*self.ray_n_samples_copy, int(6**progress * self.ray_n_samples_copy))
-            self.arc_n_samples = min(4*self.arc_n_samples_copy, int(8**progress * self.arc_n_samples_copy))
-
-            for j in trange(0, len(i_train)):
-                img_i = i_train[j]
-                target = self.data[self.image_setkeyname][img_i]
-
-                
-                pose = self.data["sensor_poses"][img_i]  
-                
-                if self.select_px_method == "byprob":
-                    coords, target = self.getRandomImgCoordsByProbability(target)
-                elif self.select_px_method == "allbins":
-                    coords, target = self.getRandomImgCoordsAllBins(target,idx_x_min=100,step=self.BN_rand)
-                else:
-                    coords, target = self.getRandomImgCoordsByPercentage(target)
-
-                n_pixels = len(coords)
-                rays_d, dphi, r, rs, pts, dists = get_arcs(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
-                                                        self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
-                                                        self.randomize_points, self.device, self.cube_center)
-
-                
-                target_s = target[coords[:, 0], coords[:, 1]]
-
-                render_out = self.renderer.render_sonar(rays_d, pts, dists, n_pixels, 
-                                                        self.arc_n_samples, self.ray_n_samples,
-                                                        cos_anneal_ratio=self.get_cos_anneal_ratio())
-                
-
-                intensityPointsOnArc = render_out["intensityPointsOnArc"]
-
-                gradient_error = render_out['gradient_error'] #.reshape(n_pixels, self.arc_n_samples, -1)
-
-                eikonal_loss = gradient_error.sum()*(1/(self.arc_n_samples*self.ray_n_samples*n_pixels))
-
-                variation_regularization = render_out['variation_error']*(1/(self.arc_n_samples*self.ray_n_samples*n_pixels))
-
-                if self.r_div:
-                    intensity_fine = (torch.divide(intensityPointsOnArc, rs)*render_out["weights"]).sum(dim=1) 
-                else:
-                    intensity_fine = render_out['color_fine']
-
-                intensity_error = self.criterion(intensity_fine, target_s)*(1/n_pixels)
-
-                # altimeter measurements
-                pts = torch.from_numpy(self.data["PC"]).to(torch.float32).to(self.device) - self.cube_center.view(1,3)           
-                render_out = self.renderer.render_altimeter(pts[:,:2], self.sdf_network)
-                sdf_err =  torch.abs(pts[:,2]-render_out["z"][:,0]).sum()*(1/pts.shape[0])    
+        for i in range(0, self.W, step):
             
-                loss = intensity_error*self.intensity_weight + eikonal_loss * self.igr_weight  + variation_regularization*self.variation_reg_weight+ sdf_err*self.bathy_weight
+            coords, target = self.getSerialImgCoordsAllBins(target,idx_y_start=i,idx_x_min=idx_x_min,step=step)
+            # print(i, coords.shape)
+            n_pixels = len(coords)
+            rays_d, dphi, r, rs, pts, dists = get_arcs(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
+                                                    self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
+                                                    self.randomize_points, self.device, self.cube_center)
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                with torch.no_grad():
-                    lossNG = intensity_error*self.intensity_weight  + eikonal_loss * self.igr_weight  + sdf_err*self.bathy_weight
-
-                    loss_total += lossNG.cpu().numpy().item()
-                    sum_intensity_loss += intensity_error.cpu().numpy().item()
-                    sum_eikonal_loss += eikonal_loss.cpu().numpy().item()
-                    sum_total_variational +=  variation_regularization.cpu().numpy().item()
-                    sum_bathymetric_loss+=sdf_err.cpu().numpy().item()
-
-                self.iter_step += 1
-                self.update_learning_rate(self.learning_rate_decay_mode)
-
-                del(target)
-                del(target_s)
-                del(rays_d)
-                del(pts)
-                del(dists)
-                del(render_out)
-                del(coords)
-                
-            with torch.no_grad():
-                l = loss_total/len(i_train)
-                iL =  sum_intensity_loss/len(i_train)
-                eikL =  sum_eikonal_loss/len(i_train)
-                varL =  sum_total_variational/len(i_train)
-                bL = sum_bathymetric_loss/len(i_train)
-                loss_arr.append(l)
-
-            if i ==0 or i % self.save_freq == 0:
-                logging.info('iter:{} ********************* SAVING CHECKPOINT ****************'.format(self.optimizer.param_groups[0]['lr']))
-                self.save_checkpoint()
-
-            if i % self.report_freq == 0:
-                print('iter:{:8>d} "Loss={} | intensity Loss={} " | bathymetric loss={} | eikonal loss={} | total variation loss = {} | lr={} | inv_s={} | ray_n_samples={} | arc_n_samples={}'.format(
-                    self.iter_step, l, iL, bL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(10*self.deviation_network.variance.item()), self.ray_n_samples, self.arc_n_samples) )
-
-            if i == 0 or i % self.val_mesh_freq == 0:
-                # self.validate_mesh(threshold = self.level_set)
-                heightmap_nn, mae = self.export_heightmap_mae(mask_out=15)  # (-1,2)# numpy array 
-                os.makedirs(os.path.join(self.base_exp_dir, 'meshes'), exist_ok=True)
-                np.save(os.path.join(self.base_exp_dir, 'meshes', '{:0>8d}.npy'.format(self.iter_step)), heightmap_nn)
-                print('iter:{:8>d} "mae={} | '.format(
-                    self.iter_step, mae) )
-
-
-            self.writer.add_scalar('Loss/loss', l, self.iter_step)
-            self.writer.add_scalar('Loss/intensity_loss', iL, self.iter_step)
-            self.writer.add_scalar('Loss/eikonal_loss', eikL, self.iter_step)
-            self.writer.add_scalar('Loss/bathymetric_loss', bL, self.iter_step)
-            self.writer.add_scalar('Statistics/s_val', varL, self.iter_step)
-            self.writer.add_scalar('Statistics/inv_s', torch.exp(self.deviation_network.variance*10).item(), self.iter_step)
-            self.writer.add_scalar('Statistics/lr', self.optimizer.param_groups[0]["lr"], self.iter_step)
-            self.writer.add_scalar('Statistics/mae', mae, self.iter_step)
             
+            target_s = target[coords[:, 0], coords[:, 1]]
+
+            render_out = self.renderer.render_sonar(rays_d, pts, dists, n_pixels, 
+                                                    self.arc_n_samples, self.ray_n_samples,
+                                                    cos_anneal_ratio=1.0)
+            
+            intensity = render_out['color_fine']
+            pred[idx_x_min:self.H,i:i+step] = intensity.detach().cpu().reshape((self.H-idx_x_min,step)).numpy()
+            del(intensity)
+            del(render_out)
+            del(coords)
+        return pred,self.data[self.image_setkeyname][img_i]
+
+
+
+
+
+
+
+
 
 
     def save_checkpoint(self):
@@ -424,11 +340,12 @@ class Runner:
         torch.save(checkpoint, os.path.join(self.base_exp_dir, 'checkpoints', 'ckpt_{:0>6d}.pth'.format(self.iter_step)))
 
     def load_checkpoint(self, checkpoint_name):
+        print("loading "+ os.path.join(self.base_exp_dir, 'checkpoints', checkpoint_name))
         checkpoint = torch.load(os.path.join(self.base_exp_dir, 'checkpoints', checkpoint_name), map_location=self.device)
         self.sdf_network.load_state_dict(checkpoint['sdf_network_fine'])
         self.deviation_network.load_state_dict(checkpoint['variance_network_fine'])
         self.color_network.load_state_dict(checkpoint['color_network_fine'])
-        self.optimizer.load_state_dict(checkpoint['optimizer'])
+        # self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.iter_step = checkpoint['iter_step']
 
     def update_learning_rate(self, mode="cos"):
@@ -479,8 +396,8 @@ if __name__=='__main__':
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--conf', type=str, default="./confs/conf.conf")
-    parser.add_argument('--is_continue', default=False, action="store_true")
-    parser.add_argument('--gpu', type=int, default=0)
+    parser.add_argument('--is_continue', default=True, action="store_true")
+    parser.add_argument('--gpu', type=int, default=1)
     parser.add_argument('--PC_name', type=str, default="PC.npy")
     parser.add_argument('--heightmap_name', type=str, default="heightmap_gt.npy")
 
@@ -492,4 +409,25 @@ if __name__=='__main__':
     runner = Runner(args)
 
     runner.set_params()
-    runner.train()
+    j = 0
+    runner.arc_n_samples = 20
+    runner.ray_n_samples = 30
+
+    pred, target = runner.render_sonar_image(j=j,step=8, idx_x_min=100)
+    print(pred.max(), pred.min())
+
+    plt.figure()
+    plt.imshow(pred/pred.max()*1,origin="lower",cmap="gray",vmax=1)
+    plt.colorbar()
+    plt.savefig("pred_"+str(j)+".png")
+
+
+    plt.figure()
+    plt.imshow(target/target.max()*1,origin="lower",cmap="gray",vmax=1)
+    plt.colorbar()
+    plt.savefig("target_"+str(j)+".png")
+
+    
+    plt.show()
+    
+    # runner.train()

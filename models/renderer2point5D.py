@@ -110,10 +110,13 @@ class NeuSRenderer:
 
 
         sampled_color = color_network(pts_mid, gradients, dirs, feature_vector).reshape(n_pixels, arc_n_samples, ray_n_samples)
-
-        inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
-
-        inv_s = inv_s.expand(n_pixels*arc_n_samples*ray_n_samples, 1)
+        # for better convergence
+        if cos_anneal_ratio<0.1:
+            inv_s=100
+            # print("cos_anneal_ratio, inv_s ", cos_anneal_ratio, inv_s)
+        else:
+            inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
+            inv_s = inv_s.expand(n_pixels*arc_n_samples*ray_n_samples, 1)
         true_cos = (dirs * gradients).sum(-1, keepdim=True)
 
         activation  = nn.Softplus(beta=100)
