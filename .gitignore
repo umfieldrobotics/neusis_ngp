@@ -1,2 +1,6 @@
 *.png
+*.out
 experiments/*
+.vscode
+*.pyc
+*.sbatch

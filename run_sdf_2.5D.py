@@ -253,8 +253,8 @@ class Runner:
             
         return coords, target
     
-    def export_heightmap_mae(self, no_grad=True, mask_out=30):
-        heightmap_H = self.data["heightmap_init"].shape[0]
+    def export_heightmap_mae(self, no_grad=True, mask_out=30, compute_mae=False):
+        heightmap_H = int((self.x_max-self.x_min)/self.res)
         coords = get_mgrid(heightmap_H) # cuda
         x = coords[:,0] * self.res + self.x_min
         y = coords[:,1] * self.res + self.y_min
@@ -272,25 +272,29 @@ class Runner:
         z = render_out["z"][:,0] + self.cube_center[2]
         
         heightmap_nn = z.view(heightmap_H,heightmap_H).detach().cpu().numpy()
-        heightmap_gt = self.data["heightmap_init"]
+        if compute_mae:
+            heightmap_gt = self.data["heightmap_init"]
 
-        mask = np.ones_like(heightmap_gt,dtype=bool) # invalid mask
-        # mask_out = 30 # meter
-        mask[:int(mask_out/self.res),:]=0
-        mask[heightmap_H-int(mask_out/self.res):,:]=0
-        mask[:,:int(mask_out/self.res)]=0
-        mask[:,heightmap_H-int(mask_out/self.res):]=0
-        heightmap_gt_plot = heightmap_gt.copy()
-        heightmap_nn_plot = heightmap_nn.copy()
-
-
-        heightmap_gt_plot[~mask]=np.nan
-        heightmap_nn_plot[~mask]=np.nan
-        diff = heightmap_gt_plot - heightmap_nn_plot
-        mae = np.abs(diff)[~np.isnan(diff)].mean()
+            mask = np.ones_like(heightmap_gt,dtype=bool) # invalid mask
+            # mask_out = 30 # meter
+            mask[:int(mask_out/self.res),:]=0
+            mask[heightmap_H-int(mask_out/self.res):,:]=0
+            mask[:,:int(mask_out/self.res)]=0
+            mask[:,heightmap_H-int(mask_out/self.res):]=0
+            heightmap_gt_plot = heightmap_gt.copy()
+            heightmap_nn_plot = heightmap_nn.copy()
 
 
-        return heightmap_nn, mae
+            heightmap_gt_plot[~mask]=np.nan
+            heightmap_nn_plot[~mask]=np.nan
+            diff = heightmap_gt_plot - heightmap_nn_plot
+            mae = np.abs(diff)[~np.isnan(diff)].mean()
+
+
+            return heightmap_nn, mae
+        else:
+            return heightmap_nn, 0
+        # return heightmap_nn, mae
 
     def train(self):
         loss_arr = []
@@ -306,7 +310,7 @@ class Runner:
 
             # corse to fine:
             progress = (self.iter_step - self.warm_up_end) / (self.end_iter - self.warm_up_end)
-            self.ray_n_samples = min(3*self.ray_n_samples_copy, int(6**progress * self.ray_n_samples_copy))
+            # self.ray_n_samples = min(3*self.ray_n_samples_copy, int(6**progress * self.ray_n_samples_copy))
             self.arc_n_samples = min(4*self.arc_n_samples_copy, int(8**progress * self.arc_n_samples_copy))
 
             for j in trange(0, len(i_train)):
@@ -324,16 +328,19 @@ class Runner:
                     coords, target = self.getRandomImgCoordsByPercentage(target)
 
                 n_pixels = len(coords)
-                rays_d, dphi, r, rs, pts, dists = get_arcs(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
-                                                        self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
-                                                        self.randomize_points, self.device, self.cube_center)
+                # rays_d, dphi, r, rs, pts, dists = get_arcs(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
+                                                        # self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
+                                                        # self.randomize_points, self.device, self.cube_center)
 
                 
                 target_s = target[coords[:, 0], coords[:, 1]]
+                render_out = self.renderer.render_sonar(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
+                                                        self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
+                                                        self.randomize_points, self.device, self.cube_center,cos_anneal_ratio=self.get_cos_anneal_ratio())
 
-                render_out = self.renderer.render_sonar(rays_d, pts, dists, n_pixels, 
-                                                        self.arc_n_samples, self.ray_n_samples,
-                                                        cos_anneal_ratio=self.get_cos_anneal_ratio())
+                # render_out = self.renderer.render_sonar(rays_d, pts, dists, n_pixels, 
+                                                        # self.arc_n_samples, self.ray_n_samples,
+                                                        # cos_anneal_ratio=self.get_cos_anneal_ratio())
                 
 
                 intensityPointsOnArc = render_out["intensityPointsOnArc"]
@@ -376,9 +383,9 @@ class Runner:
 
                 del(target)
                 del(target_s)
-                del(rays_d)
+                # del(rays_d)
                 del(pts)
-                del(dists)
+                # del(dists)
                 del(render_out)
                 del(coords)
                 
@@ -406,6 +413,10 @@ class Runner:
                 print('iter:{:8>d} "mae={} | '.format(
                     self.iter_step, mae) )
 
+            # update hash encoding mask
+            level = int(self.iter_step/self.sdf_network.steps_per_level) +1
+            level = max(level, self.sdf_network.level_init)
+            self.sdf_network.update_mask(level)
 
             self.writer.add_scalar('Loss/loss', l, self.iter_step)
             self.writer.add_scalar('Loss/intensity_loss', iL, self.iter_step)
@@ -415,6 +426,7 @@ class Runner:
             self.writer.add_scalar('Statistics/inv_s', torch.exp(self.deviation_network.variance*10).item(), self.iter_step)
             self.writer.add_scalar('Statistics/lr', self.optimizer.param_groups[0]["lr"], self.iter_step)
             self.writer.add_scalar('Statistics/mae', mae, self.iter_step)
+            self.writer.add_scalar('Statistics/level', level, self.iter_step)
             
 
 

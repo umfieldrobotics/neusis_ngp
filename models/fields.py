@@ -23,6 +23,8 @@ class SDFNetworkTcnn(nn.Module):
                  scale=1,
                  desired_resolution=1024,
                  log2_hashmap_size=19,
+                 level_init=4,# initial level of multi-res has encoding
+                 steps_per_level=5000, # steps per level of multi-res has encoding
                  geometric_init=True,
                  weight_norm=True,
                  inside_outside=False):
@@ -30,6 +32,9 @@ class SDFNetworkTcnn(nn.Module):
         self.scale = scale
         self.include_input=True
         self.n_layers=n_layers
+        self.level_init= level_init
+        self.steps_per_level= steps_per_level
+
 
         per_level_scale = exp2(log2(desired_resolution / 16) / (16 - 1))
         if encoding=="frequency":
@@ -48,6 +53,11 @@ class SDFNetworkTcnn(nn.Module):
                 },
             )
             input_ch = self.encoder.n_output_dims
+            self.hash_encoding_mask = torch.ones(
+                16* 2,
+                # self.num_levels * self.features_per_level,
+                dtype=torch.float32,
+            )
         else:
             raise NotImplementedError()
 
@@ -93,8 +103,10 @@ class SDFNetworkTcnn(nn.Module):
         self.sdf_net = nn.ModuleList(sdf_net)
         self.activation = nn.Softplus(beta=100)
 
-    
-  
+    # https://github.com/autonomousvision/sdfstudio/blob/master/nerfstudio/fields/sdf_field.py
+    def update_mask(self, level):
+        self.hash_encoding_mask[:] = 1.0
+        self.hash_encoding_mask[level * 2:] = 0
 
     def forward(self, inputs, bound=1):
 
@@ -103,6 +115,9 @@ class SDFNetworkTcnn(nn.Module):
 
         inputs = (inputs + bound)/(2*bound)
         h = self.encoder(inputs).to(dtype=torch.float)
+        # mask feature
+        h = h * self.hash_encoding_mask.to(h.device)
+
         if self.include_input:
             h = torch.cat([inputs, h], dim=-1)
         for l in range(self.n_layers):
