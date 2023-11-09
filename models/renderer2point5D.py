@@ -277,7 +277,7 @@ class NeuSRenderer:
                     # print("here ", i)
 
             self.arc_n_samples = self.arc_n_samples + self.n_importance
-        dirs, pts_r_rand, dists = self.get_coords(r, theta, phi)
+        dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi)
 
         
         ret_fine = self.render_core_sonar(dirs,
@@ -305,7 +305,8 @@ class NeuSRenderer:
             'weights': weights,
             'intensityPointsOnArc': ret_fine["intensityPointsOnArc"],
             'gradient_error': ret_fine['gradient_error'],
-            'variation_error': ret_fine['variation_error']
+            'variation_error': ret_fine['variation_error'],
+            'rs':rs,
         }
 
     def get_arcs(self, H, W, phi_min, phi_max, r_min, r_max, c2w, n_selected_px, arc_n_samples, ray_n_samples, 
@@ -447,7 +448,7 @@ class NeuSRenderer:
         dirs, pts_r_rand, dists = self.cal_pts(r_samples, theta_samples, phi_samples, coords, ray_n_samples=self.ray_n_samples)
 
         
-        return dirs, pts_r_rand, dists
+        return dirs, pts_r_rand, dists, rs
 
     def extract_geometry(self, bound_min, bound_max, resolution, threshold=0.0):
         return extract_geometry(bound_min,

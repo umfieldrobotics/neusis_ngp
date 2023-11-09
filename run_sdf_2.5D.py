@@ -352,7 +352,7 @@ class Runner:
                 variation_regularization = render_out['variation_error']*(1/(self.arc_n_samples*self.ray_n_samples*n_pixels))
 
                 if self.r_div:
-                    intensity_fine = (torch.divide(intensityPointsOnArc, rs)*render_out["weights"]).sum(dim=1) 
+                    intensity_fine = (torch.divide(intensityPointsOnArc, render_out["rs"])*render_out["weights"]).sum(dim=1) 
                 else:
                     intensity_fine = render_out['color_fine']
 
