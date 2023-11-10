@@ -115,9 +115,9 @@ class SDFNetworkTcnn(nn.Module):
 
     # https://github.com/SuLvXiangXin/zipnerf-pytorch/blob/4de3d21ebb9e15412d36951b56e2d713fddd812b/internal/models.py#L439
     # https://arxiv.org/pdf/2304.06706.pdf Fig 2, downweighting
-    def cal_weights(self, r):
+    def cal_weights(self, r, device='cuda'):
         # r and self.resolutions should be both normalized to [~,1]
-        self.weights = erf(1/torch.sqrt(8*(r)**2*(self.resolutions.to(r.device))**2))
+        self.weights = erf(1/torch.sqrt(8*(r)**2*(self.resolutions.to(device))**2))
 
     def forward(self, inputs, bound=1, use_weights=True):
 
@@ -129,10 +129,11 @@ class SDFNetworkTcnn(nn.Module):
         
         # mask feature
         h = h * self.hash_encoding_mask.to(h.device)
+        if not use_weights:
+            self.cal_weights(1.0, device=h.device)
 
-        # down-weight features according to range and feature resolution
-        if use_weights:
-            h=h * self.weights
+        # down-weight features according to range(optional) and feature resolution
+        h=h * self.weights
 
         if self.include_input:
             h = torch.cat([inputs, h], dim=-1)
