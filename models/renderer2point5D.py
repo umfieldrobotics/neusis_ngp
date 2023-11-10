@@ -100,7 +100,7 @@ class NeuSRenderer:
         if compute_gradient:
             sdf_nn_output, gradients = sdf_network.forward_with_nablas(pts)
         else:
-            sdf_nn_output = sdf_network(pts)
+            sdf_nn_output = sdf_network(pts, use_weights=False)
             gradients = None
         z = sdf_nn_output[:, :1]
         return {
@@ -115,6 +115,7 @@ class NeuSRenderer:
                         sdf_network,
                         deviation_network,
                         color_network,
+                        rs,
                         # n_pixels,
                         # arc_n_samples,
                         # ray_n_samples,
@@ -122,6 +123,8 @@ class NeuSRenderer:
 
         # pts_mid = pts + dirs * dists.view(-1,1)/2 #(-1,3)
         pts_mid = (pts + dirs * dists.view(-1,1)/2).contiguous() #(-1,3), for tcnn
+
+        sdf_network.cal_weights(rs.reshape(-1,1))
 
         sdf_nn_output, gradients = sdf_network.forward_with_nablas(pts_mid[:,:2])
 
@@ -240,7 +243,7 @@ class NeuSRenderer:
 
         if not last:
             pts = pts.reshape(-1, 3)
-            new_sdf = pts[:,2:3] - self.sdf_network.sdf(pts[:,:2])
+            new_sdf = pts[:,2:3] - self.sdf_network.sdf(pts[:,:2],use_weights=False)
             
             new_sdf = new_sdf.reshape(self.n_selected_px, n_importance)
             
@@ -266,7 +269,7 @@ class NeuSRenderer:
                 
 
 
-                sdf = (pts_r_rand[:,2:3]- self.sdf_network.sdf(pts_r_rand[:,:2])).reshape(n_selected_px, self.arc_n_samples)
+                sdf = (pts_r_rand[:,2:3]- self.sdf_network.sdf(pts_r_rand[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples)
 
                 pts_r_rand = pts_r_rand.reshape(n_selected_px, self.arc_n_samples, 3)# (n_selected_px, arc_n_samples, 3)
 
@@ -283,6 +286,7 @@ class NeuSRenderer:
         ret_fine = self.render_core_sonar(dirs,
                                         pts_r_rand,
                                         dists,
+                                        rs,
                                         self.sdf_network,
                                         self.deviation_network,
                                         self.color_network,
@@ -306,7 +310,7 @@ class NeuSRenderer:
             'intensityPointsOnArc': ret_fine["intensityPointsOnArc"],
             'gradient_error': ret_fine['gradient_error'],
             'variation_error': ret_fine['variation_error'],
-            'rs':rs,
+            'rs':rs[:,:,-1], # Now it is the range on arc!
         }
 
     def get_arcs(self, H, W, phi_min, phi_max, r_min, r_max, c2w, n_selected_px, arc_n_samples, ray_n_samples, 
@@ -320,7 +324,7 @@ class NeuSRenderer:
         self.cube_center = cube_center
         self.r_increments = r_increments
         self.randomize_points = randomize_points
-
+        self.r_max = r_max
 
         i = px[:, 0]
         j = px[:, 1]
@@ -439,7 +443,8 @@ class NeuSRenderer:
         if self.randomize_points:
             r_samples = r_samples + rnd
 
-        rs = r_samples[:, :, -1]
+        # NOTE rs is not on the arc anymore!
+        rs = r_samples/self.r_max
         r_samples = r_samples.reshape(self.n_selected_px*self.arc_n_samples, self.ray_n_samples)
 
         theta_samples = coords[:, 1].repeat_interleave(self.ray_n_samples).reshape(-1, self.ray_n_samples)

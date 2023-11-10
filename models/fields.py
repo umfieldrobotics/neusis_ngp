@@ -8,6 +8,10 @@ import sys
 import tinycudann as tcnn
 from numpy import log2, exp2
 
+# https://github.com/SuLvXiangXin/zipnerf-pytorch/blob/4de3d21ebb9e15412d36951b56e2d713fddd812b/internal/math.py#L6
+def erf(x):
+    return torch.sign(x) * torch.sqrt(1 - torch.exp(-4 / torch.pi * x ** 2))
+
 # This implementation is borrowed from Instant-NSR: https://github.com/zhaofuq/Instant-NSR
 class SDFNetworkTcnn(nn.Module):
     def __init__(self,
@@ -58,6 +62,7 @@ class SDFNetworkTcnn(nn.Module):
                 # self.num_levels * self.features_per_level,
                 dtype=torch.float32,
             )
+            self.resolutions = (torch.from_numpy(np.arange(16, desired_resolution+16,desired_resolution//32, dtype=np.int32))/desired_resolution).view(1,-1)
         else:
             raise NotImplementedError()
 
@@ -108,15 +113,26 @@ class SDFNetworkTcnn(nn.Module):
         self.hash_encoding_mask[:] = 1.0
         self.hash_encoding_mask[level * 2:] = 0
 
-    def forward(self, inputs, bound=1):
+    # https://github.com/SuLvXiangXin/zipnerf-pytorch/blob/4de3d21ebb9e15412d36951b56e2d713fddd812b/internal/models.py#L439
+    # https://arxiv.org/pdf/2304.06706.pdf Fig 2, downweighting
+    def cal_weights(self, r):
+        # r and self.resolutions should be both normalized to [~,1]
+        self.weights = erf(1/torch.sqrt(8*(r)**2*(self.resolutions.to(r.device))**2))
+
+    def forward(self, inputs, bound=1, use_weights=True):
 
         inputs = inputs * self.scale
         inputs = inputs.clamp(-bound, bound)
 
         inputs = (inputs + bound)/(2*bound)
         h = self.encoder(inputs).to(dtype=torch.float)
+        
         # mask feature
         h = h * self.hash_encoding_mask.to(h.device)
+
+        # down-weight features according to range and feature resolution
+        if use_weights:
+            h=h * self.weights
 
         if self.include_input:
             h = torch.cat([inputs, h], dim=-1)
@@ -141,8 +157,8 @@ class SDFNetworkTcnn(nn.Module):
                 only_inputs=True)[0]            
         return sdf, nablas
 
-    def sdf(self, x):
-        return self.forward(x)[:, :1]
+    def sdf(self, x, use_weights=True):
+        return self.forward(x, use_weights=use_weights)[:, :1]
 
 
 # This implementation is borrowed from IDR: https://github.com/lioryariv/idr
