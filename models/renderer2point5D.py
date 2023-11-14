@@ -208,52 +208,40 @@ class NeuSRenderer:
             'variation_error': variation_error
         }
 
-    def up_sample(self, r, theta, phi_vals, sdf, n_importance, inv_s, last=False):
+    def up_sample(self, r, dirs, dists, theta, phi_vals, sdf, n_importance, inv_s):
         """
-        Up sampling give a fixed inv_s
+        Up sampling only once give a fixed inv_s
+        phi_vals (self.n_selected_px, self.arc_n_samples)
+        dists (self.n_selected_px* self.arc_n_samples, self.ray_n_samples)
+        dirs (self.n_selected_px* self.arc_n_samples*self.ray_n_samples,3)
+        sdf (self.n_selected_px, self.arc_n_samples, self.ray_n_samples)
         """
-        # print("inv_s in up_sample ", inv_s)
-        # dist = torch.diff(r, dim=1)# n_selected_px, arc_n_samples-1
+        dists = dists.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples)[...,:-1]
+        dirs = dirs.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples,3)
+        gradients = torch.Tensor([0.0,0.0,1.0]).to(self.device).view(1,1,1,3)
+        true_cos = (dirs * gradients).sum(-1, keepdim=False)[...,:-1]
 
-        prev_phi_vals, next_phi_vals = phi_vals[:, :-1], phi_vals[:, 1:]
-        prev_sdf, next_sdf = sdf[:, :-1], sdf[:, 1:]
+
+
+        prev_sdf, next_sdf = sdf[...,:-1], sdf[..., 1:]
         mid_sdf = (prev_sdf + next_sdf) * 0.5
-        cos_val = (next_sdf - prev_sdf) / (next_phi_vals - prev_phi_vals + 1e-5)
-
-        prev_cos_val = torch.cat([torch.zeros([self.n_selected_px, 1]), cos_val[:, :-1]], dim=-1)
-        cos_val = torch.stack([prev_cos_val, cos_val], dim=-1)
-        cos_val, _ = torch.min(cos_val, dim=-1, keepdim=False)
-        cos_val = cos_val.clip(-1e3, 0.0) 
-        dist = (next_phi_vals - prev_phi_vals + 1e-5).abs() * r.reshape(-1,1)
-        prev_esti_sdf = mid_sdf - cos_val * dist * 0.5
-        next_esti_sdf = mid_sdf + cos_val * dist * 0.5
+            
+        prev_esti_sdf = mid_sdf -  true_cos * dists * 0.5
+        next_esti_sdf = mid_sdf + true_cos * dists * 0.5
         prev_cdf = torch.sigmoid(prev_esti_sdf * inv_s)
         next_cdf = torch.sigmoid(next_esti_sdf * inv_s)
-        alpha = (prev_cdf - next_cdf + 1e-5) / (prev_cdf + 1e-5)
-        weights = alpha * torch.cumprod(
-            torch.cat([torch.ones([self.n_selected_px, 1]), 1. - alpha + 1e-7], -1), -1)[:, :-1]
-        new_phi_vals = sample_pdf(phi_vals, weights, n_importance, det=True).detach()
+        alpha = ((prev_cdf - next_cdf + 1e-5) / (prev_cdf + 1e-5)).clip(0.0, 1.0)
+        T = torch.cumprod(
+            torch.cat([torch.ones([self.n_selected_px, self.arc_n_samples, 1]), 1. - alpha + 1e-7], -1), -1)[..., -2]
+        weights = alpha[...,-1] * T
         
-        arc_n_samples = phi_vals.shape[1]
-        assert n_importance == new_phi_vals.shape[1]
-
+        new_phi_vals = sample_pdf(phi_vals, weights[:,:-1], n_importance, det=True).detach()
+        
         phi_vals = torch.cat([phi_vals, new_phi_vals], dim=-1)
         phi_vals, index = torch.sort(phi_vals, dim=-1)
-        _, pts, _ = self.get_coords_on_arc(r, theta, new_phi_vals,arc_n_samples=n_importance)
 
-        if not last:
-            pts = pts.reshape(-1, 3)
-            new_sdf = pts[:,2:3] - self.sdf_network.sdf(pts[:,:2],use_weights=False)
-            
-            new_sdf = new_sdf.reshape(self.n_selected_px, n_importance)
-            
-
-            sdf = torch.cat([sdf, new_sdf], dim=-1)
-            xx = torch.arange(self.n_selected_px,)[:, None].expand(self.n_selected_px, arc_n_samples + n_importance).reshape(-1)
-            index = index.reshape(-1)
-            sdf = sdf[(xx, index)].reshape(self.n_selected_px, arc_n_samples + n_importance)
-
-        return phi_vals, sdf
+    
+        return phi_vals
 
     # def render_sonar(self, rays_d, pts, dists, n_pixels,
                     #  arc_n_samples, ray_n_samples, cos_anneal_ratio=0.0):
@@ -264,20 +252,11 @@ class NeuSRenderer:
         # Up sample
         if self.n_importance > 0:
             with torch.no_grad():
-                dirs, pts_r_rand, dists = self.get_coords_on_arc(r, theta, phi,arc_n_samples=self.arc_n_samples)
+                dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max)
 
-                
-
-
-                sdf = (pts_r_rand[:,2:3]- self.sdf_network.sdf(pts_r_rand[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples)
-
-                pts_r_rand = pts_r_rand.reshape(n_selected_px, self.arc_n_samples, 3)# (n_selected_px, arc_n_samples, 3)
-
-                
-                for i in range(self.up_sample_steps):
-                    # phi, sdf = self.up_sample(r, theta, phi, sdf, self.n_importance // self.up_sample_steps, self.deviation_network(torch.zeros([1, 3])).item()  * 2**i, last=(i + 1 == self.up_sample_steps))
-                    phi, sdf = self.up_sample(r, theta, phi, sdf, self.n_importance // self.up_sample_steps, 64 * 2**i, last=(i + 1 == self.up_sample_steps))
-                    # print("here ", i)
+                sdf = (pts_r_rand[:,2:3]- self.sdf_network.sdf(pts_r_rand[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples, self.ray_n_samples)
+            
+                phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, 64 * 2**1)
 
             self.arc_n_samples = self.arc_n_samples + self.n_importance
         dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi)
