@@ -277,6 +277,10 @@ class RenderingNetwork(nn.Module):
                  scale=1,
                  weight_norm=True,
                  multires_view=0,
+                 beamform_azimuth_kernel_points=30,
+                 estimate_beamform_azimuth=False,
+                 beamform_elevation_kernel_points=20,
+                 estimate_beamform_elevation=False,
                  squeeze_out=True):
         super().__init__()
 
@@ -285,6 +289,8 @@ class RenderingNetwork(nn.Module):
         self.scale = scale
         self.encoding= encoding
         dims = [d_in + d_feature] + [d_hidden for _ in range(n_layers)] + [d_out]
+        self.register_parameter('beamform_k_azimuth', nn.Parameter(torch.zeros(beamform_azimuth_kernel_points,1), requires_grad=estimate_beamform_azimuth))
+        self.register_parameter('beamform_k_elevation', nn.Parameter(torch.zeros(beamform_elevation_kernel_points,1), requires_grad=estimate_beamform_elevation))
 
         self.embedview_fn = None
         if multires_view > 0 and self.encoding=="frequency":

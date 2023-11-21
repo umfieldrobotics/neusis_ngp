@@ -428,6 +428,10 @@ class Runner:
             self.writer.add_scalar('Statistics/mae', mae, self.iter_step)
             self.writer.add_scalar('Statistics/level', level, self.iter_step)
             
+            for beamform_k_azimuth_i in range(self.color_network.beamform_k_azimuth.shape[0]):
+                self.writer.add_scalar('Statistics/beamform_k_azimuth'+str(beamform_k_azimuth_i), self.color_network.beamform_k_azimuth[beamform_k_azimuth_i], self.iter_step)
+            for beamform_k_elevation_i in range(self.color_network.beamform_k_elevation.shape[0]):
+                self.writer.add_scalar('Statistics/beamform_k_elevation'+str(beamform_k_elevation_i), self.color_network.beamform_k_elevation[beamform_k_elevation_i], self.iter_step)
 
 
     def save_checkpoint(self):
