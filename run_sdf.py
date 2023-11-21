@@ -301,7 +301,7 @@ class Runner:
 
             if i % self.report_freq == 0:
                 print('iter:{:8>d} "Loss={} | intensity Loss={} " | eikonal loss={} | total variation loss = {} | lr={} | inv_s={}'.format(
-                        self.iter_step, l, iL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(self.deviation_network.variance.item()*10) ) )
+                        self.iter_step, l, iL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(self.deviation_network.variance.item()*1) ) )
 
             if i == 0 or i % self.val_mesh_freq == 0:
                 self.validate_mesh(threshold = self.level_set)

@@ -166,9 +166,11 @@ class NeuSRenderer:
         ang_dist = F.softmax(-bwidth*(phi.view(1,-1)-kernel_angles)**2, dim=0) # K x N
         beamform_elevation = torch.sum(ang_dist*torch.exp(beamform_k_elevation), dim=0).reshape(self.n_selected_px, self.arc_n_samples) 
 
-
-        inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
-        inv_s = inv_s.expand(self.n_selected_px*self.arc_n_samples*self.ray_n_samples, 1)
+        if cos_anneal_ratio<0.1:
+            inv_s = torch.exp(deviation_network.init_val * 1.0) 
+        else:
+            inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
+            inv_s = inv_s.expand(self.n_selected_px*self.arc_n_samples*self.ray_n_samples, 1)
         true_cos = (dirs * gradients).sum(-1, keepdim=True)
 
         activation  = nn.Softplus(beta=100)

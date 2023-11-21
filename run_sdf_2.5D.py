@@ -309,9 +309,9 @@ class Runner:
             sum_bathymetric_loss = 0
 
             # corse to fine:
-            progress = (self.iter_step - self.warm_up_end) / (self.end_iter - self.warm_up_end)
+            # progress = (self.iter_step - self.warm_up_end) / (self.end_iter - self.warm_up_end)
             # self.ray_n_samples = min(3*self.ray_n_samples_copy, int(6**progress * self.ray_n_samples_copy))
-            self.arc_n_samples = min(4*self.arc_n_samples_copy, int(8**progress * self.arc_n_samples_copy))
+            # self.arc_n_samples = min(4*self.arc_n_samples_copy, int(8**progress * self.arc_n_samples_copy))
 
             for j in trange(0, len(i_train)):
                 img_i = i_train[j]
@@ -403,7 +403,7 @@ class Runner:
 
             if i % self.report_freq == 0:
                 print('iter:{:8>d} "Loss={} | intensity Loss={} " | bathymetric loss={} | eikonal loss={} | total variation loss = {} | lr={} | inv_s={} | ray_n_samples={} | arc_n_samples={}'.format(
-                    self.iter_step, l, iL, bL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(10*self.deviation_network.variance.item()), self.ray_n_samples, self.arc_n_samples) )
+                    self.iter_step, l, iL, bL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(1*self.deviation_network.variance.item()), self.ray_n_samples, self.arc_n_samples) )
 
             if i == 0 or i % self.val_mesh_freq == 0:
                 # self.validate_mesh(threshold = self.level_set)
@@ -423,7 +423,7 @@ class Runner:
             self.writer.add_scalar('Loss/eikonal_loss', eikL, self.iter_step)
             self.writer.add_scalar('Loss/bathymetric_loss', bL, self.iter_step)
             self.writer.add_scalar('Statistics/s_val', varL, self.iter_step)
-            self.writer.add_scalar('Statistics/inv_s', torch.exp(self.deviation_network.variance*10).item(), self.iter_step)
+            self.writer.add_scalar('Statistics/inv_s', torch.exp(self.deviation_network.variance*1).item(), self.iter_step)
             self.writer.add_scalar('Statistics/lr', self.optimizer.param_groups[0]["lr"], self.iter_step)
             self.writer.add_scalar('Statistics/mae', mae, self.iter_step)
             self.writer.add_scalar('Statistics/level', level, self.iter_step)
