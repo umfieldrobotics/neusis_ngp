@@ -31,6 +31,7 @@ class SDFNetworkTcnn(nn.Module):
                  steps_per_level=5000, # steps per level of multi-res has encoding
                  geometric_init=True,
                  weight_norm=True,
+                 down_weighting=True,
                  inside_outside=False):
         super(SDFNetworkTcnn, self).__init__()
         self.scale = scale
@@ -38,6 +39,7 @@ class SDFNetworkTcnn(nn.Module):
         self.n_layers=n_layers
         self.level_init= level_init
         self.steps_per_level= steps_per_level
+        self.down_weighting=down_weighting
 
 
         per_level_scale = exp2(log2(desired_resolution / 16) / (16 - 1))
@@ -131,9 +133,10 @@ class SDFNetworkTcnn(nn.Module):
         h = h * self.hash_encoding_mask.to(h.device)
         if not use_weights:
             self.cal_weights(1.0, device=h.device)
+        if self.down_weighting:
 
-        # down-weight features according to range(optional) and feature resolution
-        h=h * self.weights
+            # down-weight features according to range(optional) and feature resolution
+            h=h * self.weights
 
         if self.include_input:
             h = torch.cat([inputs, h], dim=-1)
