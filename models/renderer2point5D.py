@@ -329,6 +329,7 @@ class NeuSRenderer:
         self.r_increments = r_increments
         self.randomize_points = randomize_points
         self.r_max = r_max
+        self.hfov = hfov
         self.phi_max = phi_max
         self.phi_min = phi_min
 
