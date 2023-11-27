@@ -12,6 +12,10 @@ import pickle
 import matplotlib.pyplot as plt
 import time 
 
+# https://github.com/SuLvXiangXin/zipnerf-pytorch/blob/4de3d21ebb9e15412d36951b56e2d713fddd812b/internal/math.py#L6
+def erf(x):
+    return torch.sign(x) * torch.sqrt(1 - torch.exp(-4 / torch.pi * x ** 2))
+
 def extract_fields(bound_min, bound_max, resolution, query_func):
     N = 64
     X = torch.linspace(bound_min[0], bound_max[0], resolution).split(N)
@@ -154,23 +158,22 @@ class NeuSRenderer:
         d_angle = self.hfov/nbr_angles
         bwidth = 1./(2.*d_angle**2)
         ang_dist = F.softmax(-bwidth*(theta.view(1,-1)-kernel_angles)**2, dim=0) # K x N
-        beamform_azimuth = torch.sum(ang_dist*torch.exp(beamform_k_azimuth), dim=0) #  N
+        beamform_azimuth = torch.sum(ang_dist*torch.exp(beamform_k_azimuth), dim=0)/nbr_angles #  N
 
         # elevation beam pattern modelling
-        beamform_k_elevation = color_network.beamform_k_elevation
+        beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation),dim=0) 
         nbr_angles = beamform_k_elevation.shape[0]
         step = (self.phi_max- self.phi_min)/(nbr_angles-1)
         kernel_angles = torch.arange(self.phi_min, self.phi_max+step, step).unsqueeze(-1).requires_grad_(True) # K x 1 
         d_angle = (self.phi_max- self.phi_min)/nbr_angles
         bwidth = 1./(2.*d_angle**2)
         ang_dist = F.softmax(-bwidth*(phi.view(1,-1)-kernel_angles)**2, dim=0) # K x N
-        beamform_elevation = torch.sum(ang_dist*torch.exp(beamform_k_elevation), dim=0).reshape(self.n_selected_px, self.arc_n_samples) 
+        beamform_elevation = torch.sum(ang_dist*torch.exp(beamform_k_elevation), dim=0).reshape(self.n_selected_px, self.arc_n_samples) /nbr_angles
 
-        if cos_anneal_ratio<0.1:
-            inv_s = torch.exp(deviation_network.init_val * 1.0) 
-        else:
-            inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
-            inv_s = inv_s.expand(self.n_selected_px*self.arc_n_samples*self.ray_n_samples, 1)
+        inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
+        inv_s_weights =  erf(1/torch.sqrt(40*(rs)**2))
+        inv_s = (inv_s * inv_s_weights).view(-1,1)
+
         true_cos = (dirs * gradients).sum(-1, keepdim=True)
 
         activation  = nn.Softplus(beta=100)
@@ -208,9 +211,9 @@ class NeuSRenderer:
         weights = alphaPointsOnArc * TransmittancePointsOnArc 
 
         # intensityPointsOnArc = sampled_color[:, :, self.ray_n_samples-1]
-        intensityPointsOnArc = sampled_color[:, :, self.ray_n_samples-1]*beamform_azimuth.view(-1,1)*beamform_elevation
+        intensityPointsOnArc = sampled_color[:, :, self.ray_n_samples-1]*beamform_elevation
 
-        summedIntensities = (intensityPointsOnArc*weights).sum(dim=1) 
+        summedIntensities = (intensityPointsOnArc*weights).sum(dim=1) *beamform_azimuth
 
         # Eikonal loss
         # gradients = gradients.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
@@ -277,7 +280,7 @@ class NeuSRenderer:
         # Up sample
         if self.n_importance > 0:
             with torch.no_grad():
-                dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max)
+                dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi)#, back_along_ray=self.r_max)
 
                 sdf = (pts_r_rand[:,2:3]- self.sdf_network.sdf(pts_r_rand[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples, self.ray_n_samples)
             
