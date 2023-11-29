@@ -246,16 +246,16 @@ class NeuSRenderer:
         """
         dists = dists.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples)[...,:-1]
         dirs = dirs.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples,3)
-        gradients = torch.Tensor([0.0,0.0,1.0]).to(self.device).view(1,1,1,3)
-        true_cos = (dirs * gradients).sum(-1, keepdim=False)[...,:-1]
+        # gradients = torch.Tensor([0.0,0.0,1.0]).to(self.device).view(1,1,1,3)
+        # true_cos = (dirs * gradients).sum(-1, keepdim=False)[...,:-1]
 
 
 
         prev_sdf, next_sdf = sdf[...,:-1], sdf[..., 1:]
         mid_sdf = (prev_sdf + next_sdf) * 0.5
             
-        prev_esti_sdf = mid_sdf -  true_cos * dists * 0.5
-        next_esti_sdf = mid_sdf + true_cos * dists * 0.5
+        prev_esti_sdf = mid_sdf -  (next_sdf - prev_sdf) * 0.5
+        next_esti_sdf = mid_sdf + (next_sdf - prev_sdf) * 0.5
         prev_cdf = torch.sigmoid(prev_esti_sdf * inv_s)
         next_cdf = torch.sigmoid(next_esti_sdf * inv_s)
         alpha = ((prev_cdf - next_cdf + 1e-5) / (prev_cdf + 1e-5)).clip(0.0, 1.0)
@@ -281,8 +281,8 @@ class NeuSRenderer:
         if self.n_importance > 0:
             with torch.no_grad():
                 dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi)#, back_along_ray=self.r_max)
-
-                sdf = (pts_r_rand[:,2:3]- self.sdf_network.sdf(pts_r_rand[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples, self.ray_n_samples)
+                pts_mid = (pts_r_rand + dirs * dists.view(-1,1)/2).contiguous() #(-1,3), for tcnn
+                sdf = (pts_mid[:,2:3]- self.sdf_network.sdf(pts_mid[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples, self.ray_n_samples)
             
                 phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, 64 * 2**1)
 
