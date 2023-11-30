@@ -285,14 +285,14 @@ class NeuSRenderer:
         # Up sample
         if self.n_importance > 0:
             with torch.no_grad():
-                dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi)#, back_along_ray=self.r_max)
+                dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max/2)
                 pts_mid = (pts_r_rand + dirs * dists.view(-1,1)/2).contiguous() #(-1,3), for tcnn
                 sdf = (pts_mid[:,2:3]- self.sdf_network.sdf(pts_mid[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples, self.ray_n_samples)
             
                 phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, self.inv_s_up_sample)
 
             self.arc_n_samples = self.arc_n_samples + self.n_importance
-        dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi)
+        dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max/2)
 
         
         ret_fine = self.render_core_sonar(dirs,
@@ -423,7 +423,7 @@ class NeuSRenderer:
         dirs, pts_r_rand, dists = self.cal_pts(r_samples[...,None], theta_samples[...,None], phi_samples[...,None], coords,ray_n_samples=1)
         return dirs, pts_r_rand, dists
 
-    def get_coords(self, r, theta, phi):
+    def get_coords(self, r, theta, phi, back_along_ray=15):
         
 
         # Need to calculate coords to figure out the ray direction 
@@ -441,7 +441,10 @@ class NeuSRenderer:
 
 
         for n_px in range(self.n_selected_px):
-            holder[n_px, :] = torch.randint(0, self.i[n_px]-1, (self.arc_n_samples*self.ray_n_samples,))
+            idx_min = self.i[n_px]-1 - int(back_along_ray/self.sonar_resolution) # Back up back_along_ray meters
+            idx_min = max(0, idx_min)
+            holder[n_px, :] = torch.randint(idx_min, self.i[n_px]-1, (self.arc_n_samples*self.ray_n_samples,))
+            # holder[n_px, :] = torch.randint(0, self.i[n_px]-1, (self.arc_n_samples*self.ray_n_samples,))
             holder[n_px, bitmask] = self.i[n_px] 
         
         holder = holder.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples)
