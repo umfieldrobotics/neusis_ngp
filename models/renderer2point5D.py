@@ -87,6 +87,7 @@ class NeuSRenderer:
                  n_importance,
                  n_outside,
                  up_sample_steps,
+                 inv_s_up_sample,
                  perturb):
         self.sdf_network = sdf_network
         self.deviation_network = deviation_network
@@ -98,6 +99,7 @@ class NeuSRenderer:
         self.perturb = perturb
         self.base_exp_dir = base_exp_dir
         self.expID = expID
+        self.inv_s_up_sample = inv_s_up_sample
     
     
     def render_altimeter(self, pts, sdf_network, compute_gradient=False):
@@ -244,24 +246,27 @@ class NeuSRenderer:
         dirs (self.n_selected_px* self.arc_n_samples*self.ray_n_samples,3)
         sdf (self.n_selected_px, self.arc_n_samples, self.ray_n_samples)
         """
-        dists = dists.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples)[...,:-1]
-        dirs = dirs.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples,3)
-        # gradients = torch.Tensor([0.0,0.0,1.0]).to(self.device).view(1,1,1,3)
-        # true_cos = (dirs * gradients).sum(-1, keepdim=False)[...,:-1]
+        # dists = dists.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples)[...,:-1]
+        # dirs = dirs.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples,3)
+        # # gradients = torch.Tensor([0.0,0.0,1.0]).to(self.device).view(1,1,1,3)
+        # # true_cos = (dirs * gradients).sum(-1, keepdim=False)[...,:-1]
 
 
 
         prev_sdf, next_sdf = sdf[...,:-1], sdf[..., 1:]
         mid_sdf = (prev_sdf + next_sdf) * 0.5
             
-        prev_esti_sdf = mid_sdf -  (next_sdf - prev_sdf) * 0.5
-        next_esti_sdf = mid_sdf + (next_sdf - prev_sdf) * 0.5
-        prev_cdf = torch.sigmoid(prev_esti_sdf * inv_s)
-        next_cdf = torch.sigmoid(next_esti_sdf * inv_s)
-        alpha = ((prev_cdf - next_cdf + 1e-5) / (prev_cdf + 1e-5)).clip(0.0, 1.0)
-        T = torch.cumprod(
-            torch.cat([torch.ones([self.n_selected_px, self.arc_n_samples, 1]), 1. - alpha + 1e-7], -1), -1)[..., -2]
-        weights = alpha[...,-1] * T
+        # prev_esti_sdf = mid_sdf -  (next_sdf - prev_sdf) * 0.5
+        # next_esti_sdf = mid_sdf + (next_sdf - prev_sdf) * 0.5
+        # prev_cdf = torch.sigmoid(prev_esti_sdf * inv_s)
+        # next_cdf = torch.sigmoid(next_esti_sdf * inv_s)
+        # alpha = ((prev_cdf - next_cdf + 1e-5) / (prev_cdf + 1e-5)).clip(0.0, 1.0)
+        # T = torch.cumprod(
+        #     torch.cat([torch.ones([self.n_selected_px, self.arc_n_samples, 1]), 1. - alpha + 1e-7], -1), -1)[..., -2]
+        # weights = alpha[...,-1] * T
+
+        weights = torch.exp(-(mid_sdf[...,-1]*inv_s)**2)
+
         
         new_phi_vals = sample_pdf(phi_vals, weights[:,:-1], n_importance, det=True).detach()
         
@@ -284,7 +289,7 @@ class NeuSRenderer:
                 pts_mid = (pts_r_rand + dirs * dists.view(-1,1)/2).contiguous() #(-1,3), for tcnn
                 sdf = (pts_mid[:,2:3]- self.sdf_network.sdf(pts_mid[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples, self.ray_n_samples)
             
-                phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, 64 * 2**1)
+                phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, self.inv_s_up_sample)
 
             self.arc_n_samples = self.arc_n_samples + self.n_importance
         dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi)
