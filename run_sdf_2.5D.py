@@ -298,7 +298,7 @@ class Runner:
 
     def train(self):
         loss_arr = []
-
+        self.inv_s_up_sample_copy = self.renderer.inv_s_up_sample
         for i in trange(self.start_iter, self.end_iter, len(self.data[self.image_setkeyname])):
             i_train = np.arange(len(self.data[self.image_setkeyname]))
             np.random.shuffle(i_train)
@@ -309,9 +309,11 @@ class Runner:
             sum_bathymetric_loss = 0
 
             # corse to fine:
-            # progress = (self.iter_step - self.warm_up_end) / (self.end_iter - self.warm_up_end)
+            progress = (self.iter_step - self.warm_up_end) / (self.end_iter - self.warm_up_end)
             # self.ray_n_samples = min(3*self.ray_n_samples_copy, int(6**progress * self.ray_n_samples_copy))
             # self.arc_n_samples = min(4*self.arc_n_samples_copy, int(8**progress * self.arc_n_samples_copy))
+            
+            self.renderer.inv_s_up_sample = min(4*self.inv_s_up_sample_copy, (8**progress * self.inv_s_up_sample_copy))
 
             for j in trange(0, len(i_train)):
                 img_i = i_train[j]

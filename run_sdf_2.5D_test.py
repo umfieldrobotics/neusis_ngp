@@ -46,10 +46,13 @@ class Runner:
         self.write_config = write_config
         self.PC_name = args.PC_name
         self.heightmap_name = args.heightmap_name
+        self.base_dir = args.base_dir
+        self.slurm_id = args.slurm_id
+
         print(self.conf)
 
     def set_params(self):
-        self.expID = self.conf.get_string('conf.expID') 
+        self.expID = self.conf.get_string('conf.expID') + "_" + self.slurm_id
 
         dataset = self.conf.get_string('conf.dataset')
         self.image_setkeyname =  self.conf.get_string('conf.image_setkeyname') 
@@ -84,7 +87,7 @@ class Runner:
 
         self.ray_n_samples = self.conf['model.neus_renderer']['n_samples']
         self.ray_n_samples_copy = self.ray_n_samples
-        self.base_exp_dir = './experiments/{}'.format(self.expID)
+        self.base_exp_dir = self.base_dir +'experiments/{}'.format(self.expID)
         self.randomize_points = self.conf.get_float('train.randomize_points')
         self.select_px_method = self.conf.get_string('train.select_px_method')
         self.select_valid_px = self.conf.get_bool('train.select_valid_px')        
@@ -97,7 +100,7 @@ class Runner:
         self.level_set = self.conf.get_float('mesh.level_set')
         self.res = self.conf.get_float('mesh.res')
 
-        self.data = load_data(dataset,self.PC_name,self.heightmap_name)
+        self.data = load_data(dataset,self.base_dir,self.PC_name,self.heightmap_name)
 
 
         self.H, self.W = self.data[self.image_setkeyname][0].shape
@@ -128,20 +131,20 @@ class Runner:
 
         self.r_increments = torch.FloatTensor(r_increments).to(self.device)
 
-        extrapath = './experiments/{}'.format(self.expID)
+        extrapath = self.base_dir +'experiments/{}'.format(self.expID)
         if not os.path.exists(extrapath):
             os.makedirs(extrapath)
 
-        extrapath = './experiments/{}/checkpoints'.format(self.expID)
+        extrapath = self.base_dir +'experiments/{}/checkpoints'.format(self.expID)
         if not os.path.exists(extrapath):
             os.makedirs(extrapath)
 
-        extrapath = './experiments/{}/model'.format(self.expID)
+        extrapath = self.base_dir +'/experiments/{}/model'.format(self.expID)
         if not os.path.exists(extrapath):
             os.makedirs(extrapath)
 
         if self.write_config:
-            with open('./experiments/{}/config.json'.format(self.expID), 'w') as f:
+            with open(self.base_dir +'experiments/{}/config.json'.format(self.expID), 'w') as f:
                 json.dump(self.conf.__dict__, f, indent = 2)
 
         # Create all image tensors beforehand to speed up process
@@ -300,16 +303,13 @@ class Runner:
             coords, target = self.getSerialImgCoordsAllBins(target,idx_y_start=i,idx_x_min=idx_x_min,step=step)
             # print(i, coords.shape)
             n_pixels = len(coords)
-            rays_d, dphi, r, rs, pts, dists = get_arcs(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
-                                                    self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
-                                                    self.randomize_points, self.device, self.cube_center)
+            render_out = self.renderer.render_sonar(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
+                                                        self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
+                                                        self.randomize_points, self.device, self.cube_center,cos_anneal_ratio=1.0)
 
             
             target_s = target[coords[:, 0], coords[:, 1]]
 
-            render_out = self.renderer.render_sonar(rays_d, pts, dists, n_pixels, 
-                                                    self.arc_n_samples, self.ray_n_samples,
-                                                    cos_anneal_ratio=1.0)
             
             intensity = render_out['color_fine']
             pred[idx_x_min:self.H,i:i+step] = intensity.detach().cpu().reshape((self.H-idx_x_min,step)).numpy()
@@ -397,9 +397,11 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--conf', type=str, default="./confs/conf.conf")
     parser.add_argument('--is_continue', default=True, action="store_true")
-    parser.add_argument('--gpu', type=int, default=1)
+    parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--PC_name', type=str, default="PC.npy")
     parser.add_argument('--heightmap_name', type=str, default="heightmap_gt.npy")
+    parser.add_argument('--slurm_id', type=str, default="")
+    parser.add_argument('--base_dir', type=str, default="./")
 
 
     args = parser.parse_args()
@@ -409,25 +411,35 @@ if __name__=='__main__':
     runner = Runner(args)
 
     runner.set_params()
-    j = 0
-    runner.arc_n_samples = 20
-    runner.ray_n_samples = 30
-
-    pred, target = runner.render_sonar_image(j=j,step=8, idx_x_min=100)
-    print(pred.max(), pred.min())
-
-    plt.figure()
-    plt.imshow(pred/pred.max()*1,origin="lower",cmap="gray",vmax=1)
-    plt.colorbar()
-    plt.savefig("pred_"+str(j)+".png")
+    figs_dir = runner.base_exp_dir+os.sep + "figs"
+    if not os.path.exists(figs_dir):
+        os.makedirs(figs_dir)
+        
+    for j in range(len(runner.data[runner.image_setkeyname])):
+        runner.arc_n_samples = 20
+        runner.ray_n_samples = 30
+        runner.renderer.n_importance = 30
+        runner.renderer.inv_s_up_sample = 2.0
 
 
-    plt.figure()
-    plt.imshow(target/target.max()*1,origin="lower",cmap="gray",vmax=1)
-    plt.colorbar()
-    plt.savefig("target_"+str(j)+".png")
+        pred, target = runner.render_sonar_image(j=j,step=2, idx_x_min=100)
+        print(pred.max(), pred.min())
+        print(target.max(), target.min())
+
+
+        plt.figure()
+        plt.imshow(pred/pred.max()*1,origin="lower",cmap="gray",vmax=1)
+        plt.colorbar()
+        plt.savefig(figs_dir+os.sep+runner.expID+"_pred_"+str(j)+"_ray_n_samples"+str(runner.ray_n_samples)+"_arc_n_samples"+str(runner.arc_n_samples)+ "_n_importance"+str(runner.renderer.n_importance)+  ".png")
+        plt.close()
+
+        plt.figure()
+        plt.imshow(target/target.max()*1,origin="lower",cmap="gray",vmax=1)
+        plt.colorbar()
+        plt.savefig(figs_dir+os.sep+runner.expID+"_target_"+str(j)+"_ray_n_samples"+str(runner.ray_n_samples)+"_arc_n_samples"+str(runner.arc_n_samples)+ "_n_importance"+str(runner.renderer.n_importance)+  ".png")
+        plt.close()
 
     
-    plt.show()
+    # plt.show()
     
     # runner.train()

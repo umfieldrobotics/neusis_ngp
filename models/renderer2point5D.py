@@ -164,6 +164,8 @@ class NeuSRenderer:
 
         # elevation beam pattern modelling
         beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation),dim=0) 
+        # beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation, -10*torch.ones(1,1)),dim=0) 
+
         nbr_angles = beamform_k_elevation.shape[0]
         step = (self.phi_max- self.phi_min)/(nbr_angles-1)
         kernel_angles = torch.arange(self.phi_min, self.phi_max+step, step).unsqueeze(-1).requires_grad_(True) # K x 1 
@@ -285,14 +287,15 @@ class NeuSRenderer:
         # Up sample
         if self.n_importance > 0:
             with torch.no_grad():
-                dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max/2)
+                dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max)
                 pts_mid = (pts_r_rand + dirs * dists.view(-1,1)/2).contiguous() #(-1,3), for tcnn
                 sdf = (pts_mid[:,2:3]- self.sdf_network.sdf(pts_mid[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples, self.ray_n_samples)
+                inv_s_weights =  erf(1/torch.sqrt(40*(rs)**2))
             
-                phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, self.inv_s_up_sample)
+                phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, self.inv_s_up_sample*inv_s_weights[...,-1])
 
             self.arc_n_samples = self.arc_n_samples + self.n_importance
-        dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max/2)
+        dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max)
 
         
         ret_fine = self.render_core_sonar(dirs,
