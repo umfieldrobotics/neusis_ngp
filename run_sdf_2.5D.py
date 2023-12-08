@@ -79,7 +79,7 @@ class Runner:
         self.warm_up_end = self.conf.get_float('train.warm_up_end', default=0.0)
         self.anneal_end = self.conf.get_float('train.anneal_end', default=0.0)
         self.percent_select_true = self.conf.get_float('train.percent_select_true', default=0.5)
-        self.r_div = self.conf.get_bool('train.r_div')
+        # self.r_div = self.conf.get_bool('train.r_div')
         # Weights
         self.igr_weight = self.conf.get_float('train.igr_weight')
         self.variation_reg_weight = self.conf.get_float('train.variation_reg_weight')
@@ -220,13 +220,31 @@ class Runner:
         coords = torch.cartesian_prod(idx_x,idx_y)# fix bugs
 
         target = torch.Tensor(target).to(self.device)
-        return coords, target        
+        return coords, target
+
     def getSerialImgCoordsAllBins(self, target,idx_y_start, idx_x_min=10, step=1):
         idx_y = torch.arange(idx_y_start, idx_y_start+step,dtype=torch.long).view(-1)
         idx_x = torch.arange(idx_x_min, self.H, dtype=torch.long).reshape(-1)# 1,self.H
         coords = torch.cartesian_prod(idx_x,idx_y)
         target = torch.Tensor(target).to(self.device)
+        return coords, target
+
+    def getRandomImgCoordsAllBeams(self, target, idx_x_start=10, idx_y_min=0, step=1):
+        idx_x = np.arange(idx_x_start, self.H)
+        np.random.shuffle(idx_x)
+        idx_x = torch.Tensor(idx_x[:step].reshape(-1,1)).long().view(-1) # step,
+        idx_y = torch.arange(idx_y_min, self.W, dtype=torch.long).view(-1)# self.W,
+
+        coords = torch.cartesian_prod(idx_x,idx_y)
+        target = torch.Tensor(target).to(self.device)
         return coords, target  
+
+    def getSerialImgCoordsAllBeams(self, target, idx_x_start=10, idx_y_min=0, step=1):
+        idx_x = torch.arange(idx_x_start, idx_x_start+step,dtype=torch.long).view(-1) # range
+        idx_y = torch.arange(idx_y_min, self.W, dtype=torch.long).reshape(-1)# 1,self.W
+        coords = torch.cartesian_prod(idx_x,idx_y)
+        target = torch.Tensor(target).to(self.device)
+        return coords, target
 
     def getRandomImgCoordsByPercentage(self, target):
         true_coords = []
@@ -326,26 +344,23 @@ class Runner:
                     coords, target = self.getRandomImgCoordsByProbability(target)
                 elif self.select_px_method == "allbins":
                     coords, target = self.getRandomImgCoordsAllBins(target,idx_x_min=100,step=self.BN_rand)
+                elif self.select_px_method == "allbeams":
+                    # equal spaced sampling
+                    coords, target = self.getRandomImgCoordsAllBeams(target,idx_x_start=100,step=self.BN_rand)
+                    self.ray_n_samples = int(self.ray_n_samples_copy * coords[0][0].item()/self.H)
+
                 else:
                     coords, target = self.getRandomImgCoordsByPercentage(target)
 
                 n_pixels = len(coords)
-                # rays_d, dphi, r, rs, pts, dists = get_arcs(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
-                                                        # self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
-                                                        # self.randomize_points, self.device, self.cube_center)
-
+                
                 
                 target_s = target[coords[:, 0], coords[:, 1]]
                 render_out = self.renderer.render_sonar(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
                                                         self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
                                                         self.randomize_points, self.device, self.cube_center,cos_anneal_ratio=self.get_cos_anneal_ratio())
 
-                # render_out = self.renderer.render_sonar(rays_d, pts, dists, n_pixels, 
-                                                        # self.arc_n_samples, self.ray_n_samples,
-                                                        # cos_anneal_ratio=self.get_cos_anneal_ratio())
                 
-
-                intensityPointsOnArc = render_out["intensityPointsOnArc"]
 
                 gradient_error = render_out['gradient_error'] #.reshape(n_pixels, self.arc_n_samples, -1)
 
@@ -353,10 +368,8 @@ class Runner:
 
                 variation_regularization = render_out['variation_error']*(1/(self.arc_n_samples*self.ray_n_samples*n_pixels))
 
-                if self.r_div:
-                    intensity_fine = (torch.divide(intensityPointsOnArc, render_out["rs"])*render_out["weights"]).sum(dim=1) 
-                else:
-                    intensity_fine = render_out['color_fine']
+
+                intensity_fine = render_out['color_fine']
 
                 intensity_error = self.criterion(intensity_fine, target_s)*(1/n_pixels)
 

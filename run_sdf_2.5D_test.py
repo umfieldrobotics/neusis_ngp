@@ -77,7 +77,6 @@ class Runner:
         self.warm_up_end = self.conf.get_float('train.warm_up_end', default=0.0)
         self.anneal_end = self.conf.get_float('train.anneal_end', default=0.0)
         self.percent_select_true = self.conf.get_float('train.percent_select_true', default=0.5)
-        self.r_div = self.conf.get_bool('train.r_div')
         # Weights
         self.igr_weight = self.conf.get_float('train.igr_weight')
         self.variation_reg_weight = self.conf.get_float('train.variation_reg_weight')
@@ -211,18 +210,36 @@ class Runner:
     def getRandomImgCoordsAllBins(self, target,idx_x_min=10, step=1):
         idx_y = np.arange(self.W)
         np.random.shuffle(idx_y)
-        idx_y = torch.Tensor(idx_y[:step].reshape(-1,1)).long().view(-1) # step,1
-        idx_x = torch.arange(idx_x_min, self.H, dtype=torch.long).view(-1)# 1,self.H
+        idx_y = torch.Tensor(idx_y[:step].reshape(-1,1)).long().view(-1) # step,
+        idx_x = torch.arange(idx_x_min, self.H, dtype=torch.long).view(-1)# self.H,
         coords = torch.cartesian_prod(idx_x,idx_y)# fix bugs
 
         target = torch.Tensor(target).to(self.device)
-        return coords, target        
+        return coords, target
+
     def getSerialImgCoordsAllBins(self, target,idx_y_start, idx_x_min=10, step=1):
         idx_y = torch.arange(idx_y_start, idx_y_start+step,dtype=torch.long).view(-1)
-        idx_x = torch.arange(idx_x_min, self.H, dtype=torch.long).reshape(-1)# 1,self.H
+        idx_x = torch.arange(idx_x_min, self.H, dtype=torch.long).reshape(-1)# self.H
+        coords = torch.cartesian_prod(idx_x,idx_y)
+        target = torch.Tensor(target).to(self.device)
+        return coords, target
+
+    def getRandomImgCoordsAllBeams(self, target, idx_x_start=10, idx_y_min=0, step=1):
+        idx_x = np.arange(idx_x_start, self.H)
+        np.random.shuffle(idx_x)
+        idx_x = torch.Tensor(idx_x[:step].reshape(-1,1)).long().view(-1) # step,
+        idx_y = torch.arange(idx_y_min, self.W, dtype=torch.long).view(-1)# self.W,
         coords = torch.cartesian_prod(idx_x,idx_y)
         target = torch.Tensor(target).to(self.device)
         return coords, target  
+
+
+    def getSerialImgCoordsAllBeams(self, target, idx_x_start=10, idx_y_min=0, step=1):
+        idx_x = torch.arange(idx_x_start, idx_x_start+step,dtype=torch.long).view(-1) # range
+        idx_y = torch.arange(idx_y_min, self.W, dtype=torch.long).reshape(-1)# self.W
+        coords = torch.cartesian_prod(idx_x,idx_y)
+        target = torch.Tensor(target).to(self.device)
+        return coords, target
 
     def getRandomImgCoordsByPercentage(self, target):
         true_coords = []

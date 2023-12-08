@@ -88,6 +88,8 @@ class NeuSRenderer:
                  n_outside,
                  up_sample_steps,
                  inv_s_up_sample,
+                 r_div,
+                 erf_factor,
                  perturb):
         self.sdf_network = sdf_network
         self.deviation_network = deviation_network
@@ -100,6 +102,9 @@ class NeuSRenderer:
         self.base_exp_dir = base_exp_dir
         self.expID = expID
         self.inv_s_up_sample = inv_s_up_sample
+        self.r_div = r_div
+        self.erf_factor = erf_factor
+
     
     
     def render_altimeter(self, pts, sdf_network, compute_gradient=False):
@@ -163,8 +168,8 @@ class NeuSRenderer:
         beamform_azimuth = torch.sum(ang_dist*torch.exp(beamform_k_azimuth), dim=0)/nbr_angles #  N
 
         # elevation beam pattern modelling
-        beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation),dim=0) 
-        # beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation, -10*torch.ones(1,1)),dim=0) 
+        # beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation),dim=0) 
+        beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation, -10*torch.ones(1,1)),dim=0) 
 
         nbr_angles = beamform_k_elevation.shape[0]
         step = (self.phi_max- self.phi_min)/(nbr_angles-1)
@@ -175,7 +180,7 @@ class NeuSRenderer:
         beamform_elevation = torch.sum(ang_dist*torch.exp(beamform_k_elevation), dim=0).reshape(self.n_selected_px, self.arc_n_samples) /nbr_angles
 
         inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
-        inv_s_weights =  erf(1/torch.sqrt(40*(rs)**2))
+        inv_s_weights =  erf(1/torch.sqrt(self.erf_factor*(rs)**2))
         inv_s = (inv_s * inv_s_weights).view(-1,1)
 
         true_cos = (dirs * gradients).sum(-1, keepdim=True)
@@ -214,7 +219,6 @@ class NeuSRenderer:
 
         weights = alphaPointsOnArc * TransmittancePointsOnArc 
 
-        # intensityPointsOnArc = sampled_color[:, :, self.ray_n_samples-1]
         intensityPointsOnArc = sampled_color[:, :, self.ray_n_samples-1]*beamform_elevation
 
         summedIntensities = (intensityPointsOnArc*weights).sum(dim=1) *beamform_azimuth
@@ -290,9 +294,9 @@ class NeuSRenderer:
                 dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max)
                 pts_mid = (pts_r_rand + dirs * dists.view(-1,1)/2).contiguous() #(-1,3), for tcnn
                 sdf = (pts_mid[:,2:3]- self.sdf_network.sdf(pts_mid[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples, self.ray_n_samples)
-                inv_s_weights =  erf(1/torch.sqrt(40*(rs)**2))
+                inv_s_weights =  erf(1/torch.sqrt(self.erf_factor*(rs[...,-1])**2))
             
-                phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, self.inv_s_up_sample*inv_s_weights[...,-1])
+                phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, self.inv_s_up_sample*inv_s_weights)
 
             self.arc_n_samples = self.arc_n_samples + self.n_importance
         dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max)
@@ -311,23 +315,17 @@ class NeuSRenderer:
                                         # arc_n_samples,
                                         # ray_n_samples,
                                         cos_anneal_ratio=cos_anneal_ratio)
-        
-        color_fine = ret_fine['color']
-        weights = ret_fine['weights']
-        weights_sum = weights.sum(dim=-1, keepdim=True)
+        if self.r_div:
+            color_fine = torch.divide(ret_fine['color'], rs[:,0,-1]*self.r_max)
+        else:
+            color_fine = ret_fine['color']
         gradients = ret_fine['gradients']
-        #s_val = ret_fine['s_val'].reshape(batch_size, n_samples).mean(dim=-1, keepdim=True)
-
+        
         return {
             'color_fine': color_fine,
-            'weight_sum': weights_sum,
-            'weight_max': torch.max(weights, dim=-1, keepdim=True)[0],
             'gradients': gradients,
-            'weights': weights,
-            'intensityPointsOnArc': ret_fine["intensityPointsOnArc"],
             'gradient_error': ret_fine['gradient_error'],
             'variation_error': ret_fine['variation_error'],
-            'rs':rs[:,:,-1]*self.r_max, # Now it is the range on arc! And in meters
         }
 
     def get_arcs(self, H, W, phi_min, phi_max, r_min, r_max, c2w, n_selected_px, arc_n_samples, ray_n_samples, 
@@ -342,6 +340,7 @@ class NeuSRenderer:
         self.r_increments = r_increments
         self.randomize_points = randomize_points
         self.r_max = r_max
+        self.r_min = r_min
         self.hfov = hfov
         self.phi_max = phi_max
         self.phi_min = phi_min
@@ -446,8 +445,13 @@ class NeuSRenderer:
         for n_px in range(self.n_selected_px):
             idx_min = self.i[n_px]-1 - int(back_along_ray/self.sonar_resolution) # Back up back_along_ray meters
             idx_min = max(0, idx_min)
-            holder[n_px, :] = torch.randint(idx_min, self.i[n_px]-1, (self.arc_n_samples*self.ray_n_samples,))
+            # holder[n_px, :] = torch.randint(idx_min, self.i[n_px]-1, (self.arc_n_samples*self.ray_n_samples,))
             # holder[n_px, :] = torch.randint(0, self.i[n_px]-1, (self.arc_n_samples*self.ray_n_samples,))
+            # holder[n_px,:] = torch.linspace(idx_min, self.i[n_px]-1, self.ray_n_samples, dtype=torch.float).repeat(self.arc_n_samples).long()
+            # holder[n_px,:] = torch.randint(idx_min, self.i[n_px]-1, (self.ray_n_samples,)).repeat(self.arc_n_samples).long()
+
+            holder[n_px,:] = torch.arange(idx_min, self.i[n_px]-1, (self.i[n_px]-1-idx_min)/self.ray_n_samples, dtype=torch.float)[:self.ray_n_samples].repeat(self.arc_n_samples).long()
+
             holder[n_px, bitmask] = self.i[n_px] 
         
         holder = holder.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples)
@@ -460,6 +464,10 @@ class NeuSRenderer:
         r_samples = torch.index_select(self.r_increments, 0, holder).reshape(self.n_selected_px, 
                                                                         self.arc_n_samples, 
                                                                         self.ray_n_samples)
+        # r_samples = (torch.linspace(self.sonar_resolution, 1.0, self.ray_n_samples) ).repeat(self.arc_n_samples)
+        # r_samples = r_samples * self.i.view(-1,1)* self.sonar_resolution + self.r_min
+        # r_samples = r_samples.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples)
+
         
         rnd = torch.rand((self.n_selected_px, self.arc_n_samples, self.ray_n_samples))*self.sonar_resolution
         
