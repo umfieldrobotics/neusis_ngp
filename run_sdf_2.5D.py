@@ -109,12 +109,13 @@ class Runner:
 
         self.H, self.W = self.data[self.image_setkeyname][0].shape
 
-        self.r_min = self.data["min_range"]
-        self.r_max = self.data["max_range"]
-        self.phi_min = self.data["min_phi"]# to deal with when sonar tilts down
-        self.phi_max = self.data["max_phi"]
-        self.vfov = self.data["vfov"]
-        self.hfov = self.data["hfov"]
+        self.r_min = self.conf.get_float('sensor.r_min')
+        self.r_max = self.conf.get_float('sensor.r_max')
+        self.phi_min = self.conf.get_float('sensor.phi_min')*math.pi/180
+        self.phi_max = self.conf.get_float('sensor.phi_max')*math.pi/180
+        self.vfov = self.conf.get_float('sensor.vfov')*math.pi/180
+        self.hfov = self.conf.get_float('sensor.hfov')*math.pi/180
+
         print("self.phi_min self.phi_max", self.phi_min*180/math.pi, self.phi_max*180/math.pi)
 
 
