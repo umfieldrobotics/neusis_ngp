@@ -294,7 +294,9 @@ class NeuSRenderer:
                 dirs, pts_r_rand, dists, rs = self.get_coords(r, theta, phi, back_along_ray=self.r_max)
                 pts_mid = (pts_r_rand + dirs * dists.view(-1,1)/2).contiguous() #(-1,3), for tcnn
                 sdf = (pts_mid[:,2:3]- self.sdf_network.sdf(pts_mid[:,:2],use_weights=False)).reshape(n_selected_px, self.arc_n_samples, self.ray_n_samples)
-                inv_s_weights =  erf(1/torch.sqrt(self.erf_factor*(rs[...,-1])**2))
+                # inv_s_weights =  erf(1/torch.sqrt(self.erf_factor*(rs[...,-1])**2))
+                inv_s_weights =  erf(1/torch.sqrt(40*(rs[...,-1])**2))
+
             
                 phi = self.up_sample(r, dirs, dists, theta, phi, sdf,  self.n_importance, self.inv_s_up_sample*inv_s_weights)
 
@@ -464,7 +466,8 @@ class NeuSRenderer:
         r_samples = torch.index_select(self.r_increments, 0, holder).reshape(self.n_selected_px, 
                                                                         self.arc_n_samples, 
                                                                         self.ray_n_samples)
-        # r_samples = (torch.linspace(self.sonar_resolution, 1.0, self.ray_n_samples) ).repeat(self.arc_n_samples)
+        
+        # r_samples = (torch.linspace(max(1 - back_along_ray/self.r_max, 0) + self.sonar_resolution, 1.0, self.ray_n_samples) ).repeat(self.arc_n_samples)
         # r_samples = r_samples * self.i.view(-1,1)* self.sonar_resolution + self.r_min
         # r_samples = r_samples.reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples)
 
