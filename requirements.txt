@@ -2,7 +2,7 @@ pyhocon==0.3.57
 # torch-ema
 # ninja
 trimesh
-# opencv-python
+opencv-python
 tensorboardX
 torch
 numpy 

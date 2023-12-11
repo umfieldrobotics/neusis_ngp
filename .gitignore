@@ -5,3 +5,4 @@ experiments/*
 *.pyc
 *.sbatch
 *.npy
+data/*
