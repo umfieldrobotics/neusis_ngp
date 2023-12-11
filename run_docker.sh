@@ -10,7 +10,7 @@ then
 fi
 
 docker run -it \
-    --name neusis-ngp \
+    --name neusis_ngp \
     --privileged \
     -e "DISPLAY=$DISPLAY" \
     -e "XAUTHORITY=$XAUTH" \
