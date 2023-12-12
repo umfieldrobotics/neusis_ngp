@@ -18,6 +18,8 @@ docker run -it \
     -v "$XAUTH:$XAUTH" \
     -v "/tmp/.X11-unix:/tmp/.X11-unix:rw" \
     -v "$HOME/.Xauthority:/root/.Xauthority:rw" \
+    -v "/DATA/COOK/neusis_ngp/Data:/root/Data:ro" \
+    -v "/DATA/COOK/neusis_ngp/Experiments:/root/neusis_ngp/experiments:rw" \
     --runtime=nvidia \
     --net=host \
     $@ \

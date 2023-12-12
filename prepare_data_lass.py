@@ -34,7 +34,7 @@ import argparse
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--raw_data_base_dir', type=str, default="/home/yxie/Downloads", help="where we keep the raw data")
+parser.add_argument('--raw_data_base_dir', type=str, default="/root/Data/Gemini/LASS", help="where we keep the raw data")
 parser.add_argument('--base_dir', type=str, default=".", help="where we keep the processed data ready for training")
 
 parser.add_argument('--nav_offset_easting', type=float, default=584690 , help="navigation offset (easting) initial estimation for the heightmap, in meters")
@@ -75,26 +75,26 @@ print("img_meta ", img_meta[1])
 with open(nav_file, "r") as f:
    my_data=f.readlines()
 
-print(len(my_data), my_data[6])
-my_data_clean = []
-for (i, data) in enumerate(my_data):
-    if i<6:
-        continue
-    data_i = data.split(',')
-    if not data_i[1]=="nan":
-        data_i_arr = []
+# print(len(my_data), my_data[6])
+# my_data_clean = []
+# for (i, data) in enumerate(my_data):
+#     if i<6:
+#         continue
+#     data_i = data.split(',')
+#     if not data_i[1]=="nan":
+#         data_i_arr = []
 
-        for (j, data_ij) in enumerate(data_i):
-            if j==0:
-                data_i_arr.append(np.int64(data_ij))
-            elif j==len(data_i)-1:
-                data_i_arr.append(np.float64(data_ij.split()[0]))
-            else:
-                data_i_arr.append(np.float64(data_ij))
-        data_i_arr = np.array(data_i_arr)
-        my_data_clean.append(data_i_arr)
-print(my_data_clean[0])
-np.savetxt(clean_nav_file, my_data_clean, delimiter=',', fmt='%9f', header=header)
+#         for (j, data_ij) in enumerate(data_i):
+#             if j==0:
+#                 data_i_arr.append(np.int64(data_ij))
+#             elif j==len(data_i)-1:
+#                 data_i_arr.append(np.float64(data_ij.split()[0]))
+#             else:
+#                 data_i_arr.append(np.float64(data_ij))
+#         data_i_arr = np.array(data_i_arr)
+#         my_data_clean.append(data_i_arr)
+# print(my_data_clean[0])
+# np.savetxt(clean_nav_file, my_data_clean, delimiter=',', fmt='%9f', header=header)
 
 my_data = genfromtxt(clean_nav_file, delimiter=',')#, skip_header=1)
 print(my_data[0])

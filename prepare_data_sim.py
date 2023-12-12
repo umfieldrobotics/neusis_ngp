@@ -58,7 +58,7 @@ def bilinear_interpolate(heightmap, sigma=10):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--raw_data_base_dir', type=str, default="/home/yxie/Downloads", help="where we keep the raw data")
+parser.add_argument('--raw_data_base_dir', type=str, default="/root/Data/Sim", help="where we keep the raw data")
 parser.add_argument('--base_dir', type=str, default=".", help="where we keep the processed data ready for training")
 
 parser.add_argument('--z_offset_stonefish', type=float, default=9.03, help="z_offset for the heightmap, in meters")

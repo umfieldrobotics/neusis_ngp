@@ -5,21 +5,29 @@ This repo contains the source code for the work collabrating with MBARI.
 
 # Usage
 
+To run it on bigtuna:
+
 ## Docker Environment
 
 Build docker:
 
 ```shell
-docker build -f  Dockerfile -t mbari/fls:neusis_ngp --build-arg="READ_TOKEN=<GITHUB_TOKEN>" .
+docker build -f  Dockerfile -t mbari/fls:neusis_ngp --build-arg="READ_TOKEN=<GITHUB_TOKEN>" --no-cache .
 ```
+
+The ```<GITHUB_TOKEN>``` is needed since it is a private repo, it could be found in the nottion page.
+
+Before running the docker container, make sure you have access to ```/DATA/COOK/neusis_ngp/Data``` where I keep the data for different missions.
 
 Run docker image, start the container:
 ```shell
 bash run_docker.sh
 ```
+The docker container by default mounts ```/DATA/COOK/neusis_ngp/Data``` to ```/root/Data```, where the data is stored.
+And```/DATA/COOK/neusis_ngp/Experiments``` to ```/root/repos/neusis_ngp/experiments```, where all the training results will be stored.
 
-## Data 
-For different datasets, i.e., simulation data, Ventana data, and LASS data, run `prepare_data_<dataset_name>.py`. It will prepare the cooked data into the ```data``` directory.   
+## Prepare Data 
+For different datasets, i.e., simulation data, Ventana data, and LASS data, run `prepare_data_<dataset_name>.py` inside of the container. It will prepare the cooked data into the ```/root/repos/neusis_ngp/data``` directory.   
 The data is organized as follows:
 
 ```
@@ -28,17 +36,14 @@ data/<dataset_name>
     |-- <pose 1>.pkl        # data for each view (includes the sonar image and pose)
     |-- <pose 2>.pkl 
     ...
-|-- Config.json      # Sonar configuration
+|-- PC.npy      # Point clouds coming from the altimeter
+|-- PC_heightmap.npy      # Point clouds coming from the ground truth bathymetric map
+
 ```
 
 ## Running
-Copy the ```data/<dataset_name>``` inside of the docker container.
 
-```
-docker cp ./data/<dataset_name> <container_id>/root/repos/neusis_ngp/data/
-```
-
-Training, inside of the container ```cd /root/repos/neusis_ngp``` and run:
+Training. Inside of the container ```cd /root/repos/neusis_ngp``` and run:
 
 ``` python run_sdf_2.5D.py --conf confs/<dataset_name>.conf --gpu=1```
 
@@ -46,6 +51,13 @@ Example:
 ``` python run_sdf_2.5D.py --conf confs/scene_aerial_01.conf  --gpu=1```
 
 The resulting heightmaps are saved in the following directory ```experiments/<dataset_name>/meshes```. 
+The checkpoints are saved in ```experiments/<dataset_name>/checkpoints```. 
+The logs are saved in ```experiments/<dataset_name>/logs```, which can be visualized using tensorboard:
+```shell
+tensorboard --logdir=experiments/<dataset_name>/logs --port=6006
+
+```
+
 
 
 # Notes on training
