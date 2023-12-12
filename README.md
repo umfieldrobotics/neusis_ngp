@@ -28,6 +28,7 @@ And```/DATA/COOK/neusis_ngp/Experiments``` to ```/root/repos/neusis_ngp/experime
 
 ## Prepare Data 
 For different datasets, i.e., simulation data, Ventana data, and LASS data, run `prepare_data_<dataset_name>.py` inside of the container. It will prepare the cooked data into the ```/root/repos/neusis_ngp/data``` directory.   
+
 The data is organized as follows:
 
 ```
@@ -44,6 +45,7 @@ data/<dataset_name>
 ## Running
 
 Training. Inside of the container ```cd /root/repos/neusis_ngp``` and run:
+
 
 ``` python run_sdf_2.5D.py --conf confs/<dataset_name>.conf --gpu=1```
 
