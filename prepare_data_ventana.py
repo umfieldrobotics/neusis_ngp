@@ -31,6 +31,7 @@ import glob
 from pyhocon import ConfigFactory
 import argparse 
 import shutil
+import datetime
 
 def bilinear_interpolate(heightmap, sigma=10):
     known_points = np.array(np.where(heightmap!=0)).T
@@ -124,6 +125,8 @@ UTIME = (my_data[:,7]).astype(np.int64)
 UTIME_float =  UTIME/1e6
 idx_start = np.searchsorted(nav_raw["t"], UTIME_float[0])
 idx_end = np.searchsorted(nav_raw["t"], UTIME_float[-1])
+print(UTIME_float[0], datetime.datetime.fromtimestamp(UTIME_float[0]))
+print(UTIME_float[-1], datetime.datetime.fromtimestamp(UTIME_float[-1]))
 
 print("t", nav_raw["t"][idx_start-1], nav_raw["t"][idx_start],nav_raw["t"][idx_start+1], UTIME_float[0])
 print("dep",nav_raw["dep"][idx_start-1], nav_raw["dep"][idx_start],nav_raw["dep"][idx_start+1], Z[0])

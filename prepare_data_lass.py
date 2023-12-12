@@ -1,5 +1,5 @@
 """
-This script is used to prepare the data for training (real data, Ventana+LASS , 2023-10-10).
+This script is used to prepare the data for training (real data, Ventana+LASS , 2023-10-10, 13:39-14:17).
 
 A few things to note:
 1. The raw data is using NED-FRD convention, we need to convert it to ENU-FLU convention. This includes the pose and the FLS images (fliplr).
@@ -31,6 +31,7 @@ import glob
 from pyhocon import ConfigFactory
 import shutil
 import argparse 
+import datetime
 
 
 parser = argparse.ArgumentParser()
@@ -99,6 +100,7 @@ with open(nav_file, "r") as f:
 my_data = genfromtxt(clean_nav_file, delimiter=',')#, skip_header=1)
 print(my_data[0])
 UTIME = np.int64(my_data[:,0])
+
 print(UTIME[0])
 
 UTIME_offset = 315558000000000
@@ -121,8 +123,13 @@ map_offset_northing= geoformat[3]- heightmap_gt.shape[0]*res_gt
 
 # align timestamps
 UTIME_float =  UTIME/1e6
+
+
 idx_start = np.searchsorted(nav_corrected_data["t"], UTIME_float[0])
 idx_end = np.searchsorted(nav_corrected_data["t"], UTIME_float[-1])
+
+print(UTIME_float[0], datetime.datetime.fromtimestamp(UTIME_float[0]))
+print(UTIME_float[-1], datetime.datetime.fromtimestamp(UTIME_float[-1]))
 
 
 X = my_data[:,1] # Northing

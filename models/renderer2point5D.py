@@ -157,27 +157,29 @@ class NeuSRenderer:
 
         sampled_color = color_network(pts_mid, gradients, dirs, feature_vector).reshape(self.n_selected_px, self.arc_n_samples, self.ray_n_samples)
 
-        # azimuth beam pattern modelling
-        beamform_k_azimuth = color_network.beamform_k_azimuth
-        nbr_angles = beamform_k_azimuth.shape[0]
-        step = self.hfov/(nbr_angles-1)
-        kernel_angles = torch.arange(-self.hfov/2, self.hfov/2+step, step).unsqueeze(-1).requires_grad_(True) # K x 1 
-        d_angle = self.hfov/nbr_angles
-        bwidth = 1./(2.*d_angle**2)
-        ang_dist = F.softmax(-bwidth*(theta.view(1,-1)-kernel_angles)**2, dim=0) # K x N
-        beamform_azimuth = torch.sum(ang_dist*torch.exp(beamform_k_azimuth), dim=0)/nbr_angles #  N
+        if color_network.beamform_k_azimuth.requires_grad:
+            # azimuth beam pattern modelling
+            beamform_k_azimuth = color_network.beamform_k_azimuth
+            nbr_angles = beamform_k_azimuth.shape[0]
+            step = self.hfov/(nbr_angles-1)
+            kernel_angles = torch.arange(-self.hfov/2, self.hfov/2+step, step).unsqueeze(-1).requires_grad_(True) # K x 1 
+            d_angle = self.hfov/nbr_angles
+            bwidth = 1./(2.*d_angle**2)
+            ang_dist = F.softmax(-bwidth*(theta.view(1,-1)-kernel_angles)**2, dim=0) # K x N
+            beamform_azimuth = torch.sum(ang_dist*torch.exp(beamform_k_azimuth), dim=0)/nbr_angles #  N
 
-        # elevation beam pattern modelling
-        # beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation),dim=0) 
-        beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation, -10*torch.ones(1,1)),dim=0) 
+        if color_network.beamform_k_elevation.requires_grad:
+            # elevation beam pattern modelling
+            # beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation),dim=0) 
+            beamform_k_elevation = torch.concat((-10*torch.ones(1,1), color_network.beamform_k_elevation, -10*torch.ones(1,1)),dim=0) 
 
-        nbr_angles = beamform_k_elevation.shape[0]
-        step = (self.phi_max- self.phi_min)/(nbr_angles-1)
-        kernel_angles = torch.arange(self.phi_min, self.phi_max+step, step).unsqueeze(-1).requires_grad_(True) # K x 1 
-        d_angle = (self.phi_max- self.phi_min)/nbr_angles
-        bwidth = 1./(2.*d_angle**2)
-        ang_dist = F.softmax(-bwidth*(phi.view(1,-1)-kernel_angles)**2, dim=0) # K x N
-        beamform_elevation = torch.sum(ang_dist*torch.exp(beamform_k_elevation), dim=0).reshape(self.n_selected_px, self.arc_n_samples) /nbr_angles
+            nbr_angles = beamform_k_elevation.shape[0]
+            step = (self.phi_max- self.phi_min)/(nbr_angles-1)
+            kernel_angles = torch.arange(self.phi_min, self.phi_max+step, step).unsqueeze(-1).requires_grad_(True) # K x 1 
+            d_angle = (self.phi_max- self.phi_min)/nbr_angles
+            bwidth = 1./(2.*d_angle**2)
+            ang_dist = F.softmax(-bwidth*(phi.view(1,-1)-kernel_angles)**2, dim=0) # K x N
+            beamform_elevation = torch.sum(ang_dist*torch.exp(beamform_k_elevation), dim=0).reshape(self.n_selected_px, self.arc_n_samples) /nbr_angles
 
         inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
         inv_s_weights =  erf(1/torch.sqrt(self.erf_factor*(rs)**2))
@@ -219,9 +221,15 @@ class NeuSRenderer:
 
         weights = alphaPointsOnArc * TransmittancePointsOnArc 
 
-        intensityPointsOnArc = sampled_color[:, :, self.ray_n_samples-1]*beamform_elevation
+        intensityPointsOnArc = sampled_color[:, :, self.ray_n_samples-1]
 
-        summedIntensities = (intensityPointsOnArc*weights).sum(dim=1) *beamform_azimuth
+        if color_network.beamform_k_azimuth.requires_grad:
+            intensityPointsOnArc = intensityPointsOnArc*beamform_elevation
+
+        summedIntensities = (intensityPointsOnArc*weights).sum(dim=1)
+
+        if color_network.beamform_k_elevation.requires_grad:
+            summedIntensities = summedIntensities *beamform_azimuth
 
         # Eikonal loss
         # gradients = gradients.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
