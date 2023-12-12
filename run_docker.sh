@@ -18,6 +18,7 @@ docker run -it \
     -v "$XAUTH:$XAUTH" \
     -v "/tmp/.X11-unix:/tmp/.X11-unix:rw" \
     -v "$HOME/.Xauthority:/root/.Xauthority:rw" \
+    -v "$HOME/Data:/root/Data:ro" \
     --runtime=nvidia \
     --net=host \
     $@ \
