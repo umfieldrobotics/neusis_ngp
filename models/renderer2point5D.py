@@ -455,12 +455,12 @@ class NeuSRenderer:
         for n_px in range(self.n_selected_px):
             idx_min = self.i[n_px]-1 - int(back_along_ray/self.sonar_resolution) # Back up back_along_ray meters
             idx_min = max(0, idx_min)
-            # holder[n_px, :] = torch.randint(idx_min, self.i[n_px]-1, (self.arc_n_samples*self.ray_n_samples,))
+            holder[n_px, :] = torch.randint(idx_min, self.i[n_px]-1, (self.arc_n_samples*self.ray_n_samples,))
             # holder[n_px, :] = torch.randint(0, self.i[n_px]-1, (self.arc_n_samples*self.ray_n_samples,))
             # holder[n_px,:] = torch.linspace(idx_min, self.i[n_px]-1, self.ray_n_samples, dtype=torch.float).repeat(self.arc_n_samples).long()
             # holder[n_px,:] = torch.randint(idx_min, self.i[n_px]-1, (self.ray_n_samples,)).repeat(self.arc_n_samples).long()
 
-            holder[n_px,:] = torch.arange(idx_min, self.i[n_px]-1, (self.i[n_px]-1-idx_min)/self.ray_n_samples, dtype=torch.float)[:self.ray_n_samples].repeat(self.arc_n_samples).long()
+            # holder[n_px,:] = torch.arange(idx_min, self.i[n_px]-1, (self.i[n_px]-1-idx_min)/self.ray_n_samples, dtype=torch.float)[:self.ray_n_samples].repeat(self.arc_n_samples).long()
 
             holder[n_px, bitmask] = self.i[n_px] 
         

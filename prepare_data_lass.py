@@ -115,8 +115,8 @@ heightmap_gt = np.flipud(map["arr_0"])# heightmap_gt[n,e]
 geoformat = map["arr_1"]
 print("geoformat", geoformat)
 
-map_offset_easting = geoformat[0]
-map_offset_northing= geoformat[3]- heightmap_gt.shape[0]*res_gt
+map_offset_easting = geoformat[0] # 584228.3102276665
+map_offset_northing= geoformat[3]- heightmap_gt.shape[0]*res_gt # 4067804.940357492
 
 
 # dict_keys(['t', 'lat', 'lon', 'dep', 'hdg', 'pit', 'rol', 'utm_e', 'utm_n'])
@@ -336,10 +336,11 @@ plt.xlabel("Easting (m)")
 plt.ylabel("Northing (m)")
 plt.imshow(heightmap_gt, origin="lower", cmap='turbo', extent=[map_offset_easting,map_offset_easting+heightmap_gt.shape[1]*res_gt, map_offset_northing, map_offset_northing+heightmap_gt.shape[0]*res_gt])
 
-x_min, x_max = (584229+nav_offset_easting_best, 584309+nav_offset_easting_best) # East
-y_min, y_max = (4067826+nav_offset_northing_best, 4067906+nav_offset_northing_best)# North
+x_min, x_max = (584214+nav_offset_easting_best, 584314+nav_offset_easting_best) # East
+y_min, y_max = (4067821+nav_offset_northing_best, 4067921+nav_offset_northing_best)# North
 
-
+print("x_min, x_max", x_min, x_max)
+print("y_min, y_max", y_min, y_max)
 
 plt.xlim(x_min, x_max)
 plt.ylim(y_min, y_max)
@@ -409,6 +410,8 @@ if not os.path.exists(vis_folder):
 
 
 np.save(to_folder+os.sep+"heightmap_init.npy", heightmap_gt.astype(np.float32))
+np.save(to_folder+os.sep+"heightmap_gt.npy", heightmap_gt.astype(np.float32))
+
 np.save(to_folder+os.sep+"PC.npy", PC_new.astype(np.float32))# after the filtering of nan    
 np.save(to_folder+os.sep+"PC_heightmap.npy", PC_heightmap.astype(np.float32))
 ## 12851 imgs
@@ -438,7 +441,7 @@ for i in range(0, len(UTIME)):
             import cv2
             img = cv2.resize(np.fliplr(image), (image.shape[1]//1, image.shape[0]//1))
             
-            valid_mask = img> 0.1
+            valid_mask = img> 2e-3
 
             valid_idx_x, valid_idx_y = np.where(valid_mask)
             # valid_idx_x=valid_idx_x[valid_idx_x>3]

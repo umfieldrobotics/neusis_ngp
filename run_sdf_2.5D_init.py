@@ -357,42 +357,26 @@ class Runner:
                 
                 
                 target_s = target[coords[:, 0], coords[:, 1]]
-                render_out = self.renderer.render_sonar(self.H, self.W, self.phi_min, self.phi_max, self.r_min, self.r_max,  torch.Tensor(pose), n_pixels,
-                                                        self.arc_n_samples, self.ray_n_samples, self.hfov, coords, self.r_increments, 
-                                                        self.randomize_points, self.device, self.cube_center,cos_anneal_ratio=self.get_cos_anneal_ratio())
 
-                
-
-                gradient_error = render_out['gradient_error'] #.reshape(n_pixels, self.arc_n_samples, -1)
-
-                eikonal_loss = gradient_error.sum()*(1/(self.arc_n_samples*self.ray_n_samples*n_pixels))
-
-                variation_regularization = render_out['variation_error']*(1/(self.arc_n_samples*self.ray_n_samples*n_pixels))
-
-
-                intensity_fine = render_out['color_fine']
-
-                intensity_error = self.criterion(intensity_fine, target_s)*(1/n_pixels)
 
                 # altimeter measurements
-                altimeter_bias = self.deviation_network.forward_altimeter_bias()
                 pts = torch.from_numpy(self.data["PC"]).to(torch.float32).to(self.device) - self.cube_center.view(1,3)           
-                render_out = self.renderer.render_altimeter(pts[:,:2], self.sdf_network)
-                sdf_err =  torch.abs(pts[:,2]-altimeter_bias-render_out["z"][:,0]).sum()*(1/pts.shape[0])    
+                render_out = self.renderer.render_altimeter(pts[:,:2], self.sdf_network, compute_gradient=True)
+                sdf_err =  torch.abs(pts[:,2]-render_out["z"][:,0]).sum()*(1/pts.shape[0])    
+                gradient_error = render_out['gradient_error'] #.reshape(n_pixels, self.arc_n_samples, -1)
+
+                eikonal_loss = gradient_error.sum()*(1/(pts.shape[0]))
+
             
-                loss = intensity_error*self.intensity_weight + eikonal_loss * self.igr_weight  + variation_regularization*self.variation_reg_weight+ sdf_err*self.bathy_weight
+                loss = eikonal_loss * self.igr_weight  + sdf_err*self.bathy_weight
 
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
                 with torch.no_grad():
-                    lossNG = intensity_error*self.intensity_weight  + eikonal_loss * self.igr_weight  + sdf_err*self.bathy_weight
 
-                    loss_total += lossNG.cpu().numpy().item()
-                    sum_intensity_loss += intensity_error.cpu().numpy().item()
                     sum_eikonal_loss += eikonal_loss.cpu().numpy().item()
-                    sum_total_variational +=  variation_regularization.cpu().numpy().item()
                     sum_bathymetric_loss+=sdf_err.cpu().numpy().item()
 
                 self.iter_step += 1
@@ -419,8 +403,8 @@ class Runner:
                 self.save_checkpoint()
 
             if i % self.report_freq == 0:
-                print('iter:{:8>d} "Loss={} | intensity Loss={} " | bathymetric loss={} | eikonal loss={} | total variation loss = {} | lr={} | inv_s={} | ray_n_samples={} | arc_n_samples={} | altimeter_bias={}'.format(
-                    self.iter_step, l, iL, bL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(1*self.deviation_network.variance.item()), self.ray_n_samples, self.arc_n_samples, altimeter_bias.item()) )
+                print('iter:{:8>d} "Loss={} | intensity Loss={} " | bathymetric loss={} | eikonal loss={} | total variation loss = {} | lr={} | inv_s={} | ray_n_samples={} | arc_n_samples={} '.format(
+                    self.iter_step, l, iL, bL, eikL, varL, self.optimizer.param_groups[0]['lr'], np.exp(1*self.deviation_network.variance.item()), self.ray_n_samples, self.arc_n_samples) )
 
             if i == 0 or i % self.val_mesh_freq == 0:
                 # self.validate_mesh(threshold = self.level_set)
@@ -521,7 +505,7 @@ if __name__=='__main__':
     parser.add_argument('--conf', type=str, default="./confs/conf.conf")
     parser.add_argument('--is_continue', default=False, action="store_true")
     parser.add_argument('--gpu', type=int, default=0)
-    parser.add_argument('--PC_name', type=str, default="PC.npy")
+    parser.add_argument('--PC_name', type=str, default="PC_heightmap.npy")
     parser.add_argument('--heightmap_name', type=str, default="heightmap_gt.npy")
     parser.add_argument('--slurm_id', type=str, default="")
     parser.add_argument('--load_slurm_id', type=str, default="")

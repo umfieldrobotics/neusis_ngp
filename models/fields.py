@@ -447,10 +447,14 @@ class NeRF(nn.Module):
 
 
 class SingleVarianceNetwork(nn.Module):
-    def __init__(self, init_val):
+    def __init__(self, init_val, estimate_altimeter_bias=False):
         super(SingleVarianceNetwork, self).__init__()
         self.init_val = torch.tensor(init_val)
         self.register_parameter('variance', nn.Parameter(torch.tensor(init_val)))
+        self.register_parameter('altimeter_bias', nn.Parameter(torch.tensor(0.0), requires_grad=estimate_altimeter_bias))
 
     def forward(self, x):
         return torch.ones([len(x), 1]) * torch.exp(self.variance * 1.0)
+        
+    def forward_altimeter_bias(self):
+        return torch.tanh(0.01 * self.altimeter_bias ) * 4

@@ -474,7 +474,9 @@ vis_folder  = base_dir + os.sep + "Gemini_132429_images/"
 if not os.path.exists(vis_folder):
     os.makedirs(vis_folder)
 
+np.save(to_folder + os.sep + "heightmap_gt.npy", heightmap_gt.astype(np.float32))
 np.save(to_folder + os.sep + "heightmap_init.npy", heightmap_interpolated.astype(np.float32))
+
 np.save(to_folder + os.sep + "PC.npy", PC.astype(np.float32))
 np.save(to_folder + os.sep + "PC_heightmap.npy", PC_heightmap.astype(np.float32))
 
