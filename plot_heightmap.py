@@ -79,8 +79,16 @@ y_max = conf.get_float('mesh.y_max')
 y_min = conf.get_float('mesh.y_min')
 z_max = conf.get_float('mesh.z_max')
 z_min = conf.get_float('mesh.z_min')
-vmax = z_max + 1
-vmin = z_min - 1
+
+if dataset_name=="scene_aerial_01":
+    vmax = z_max + 1
+    vmin = z_min - 1
+elif dataset_name=="Gemini_132429":
+    vmax = z_max + 3
+    vmin = z_min - 8
+elif dataset_name=="Gemini_lass":
+    vmax = z_max + 3
+    vmin = z_min - 3
 
 res = conf.get_float('mesh.res')
 
@@ -102,7 +110,6 @@ if dataset_name=="scene_aerial_01":
     height_map_from_PC = np.load(base_data_dir+os.sep+dataset_name+os.sep+"heightmap_gt.npy").T
 elif dataset_name=="Gemini_132429":
     height_map_from_PC = pc2grid(PC_heightmap, np.array([[x_min,y_min],[x_max,y_max]]),res=1)
-
 elif dataset_name=="Gemini_lass":
     height_map_from_PC = np.load(base_data_dir+os.sep+dataset_name+os.sep+"heightmap_init.npy")
 
