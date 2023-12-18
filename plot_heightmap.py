@@ -89,6 +89,8 @@ elif dataset_name=="Gemini_132429":
 elif dataset_name=="Gemini_lass":
     vmax = z_max + 3
     vmin = z_min - 3
+    map_offset_easting = 584228.3102276665
+    map_offset_northing = 4067804.940357492
 
 res = conf.get_float('mesh.res')
 
@@ -112,6 +114,8 @@ elif dataset_name=="Gemini_132429":
     height_map_from_PC = pc2grid(PC_heightmap, np.array([[x_min,y_min],[x_max,y_max]]),res=1)
 elif dataset_name=="Gemini_lass":
     height_map_from_PC = np.load(base_data_dir+os.sep+dataset_name+os.sep+"heightmap_init.npy")
+    res_gt=0.05
+    extent_gt =[map_offset_easting,map_offset_easting+height_map_from_PC.shape[1]*res_gt, map_offset_northing, map_offset_northing+height_map_from_PC.shape[0]*res_gt]
 
 print(height_map_from_PC[height_map_from_PC!=0].max(), height_map_from_PC.min())
 
@@ -121,11 +125,8 @@ print(height_map_from_PC[height_map_from_PC!=0].max(), height_map_from_PC.min())
 
 plt.figure()
 ax = plt.gca()
-if dataset_name=="Gemini_132429":
 
-    im = plt.imshow(h.T, origin="lower", cmap="turbo", extent=[x_min,x_max,y_min,y_max], vmax=vmax, vmin=vmin)
-else:
-    im = plt.imshow(h.T, origin="lower", cmap="turbo", extent=[x_min,x_max,y_min,y_max], vmax=vmax, vmin=vmin)
+im = plt.imshow(h.T, origin="lower", cmap="turbo", extent=[x_min,x_max,y_min,y_max], vmax=vmax, vmin=vmin)
 
 plt.plot(PC[:,0],PC[:,1])
 plt.xlabel("Easting (m)")
@@ -136,7 +137,10 @@ plt.colorbar()
 
 plt.figure()
 ax = plt.gca()
-im = plt.imshow(height_map_from_PC, origin="lower", cmap="turbo", extent=[x_min,x_max,y_min,y_max], vmax=vmax, vmin=vmin)
+if dataset_name=="Gemini_lass":
+    im = plt.imshow(height_map_from_PC, origin="lower", cmap="turbo", extent=extent_gt, vmax=vmax, vmin=vmin)
+else:
+    im = plt.imshow(height_map_from_PC, origin="lower", cmap="turbo", extent=[x_min,x_max,y_min,y_max], vmax=vmax, vmin=vmin)
 
 plt.plot(PC[:,0],PC[:,1])
 plt.xlabel("Easting (m)")
