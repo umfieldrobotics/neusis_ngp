@@ -1,5 +1,5 @@
 """
-This script is used to prepare the data for training (real data, Ventana+LASS , 2023-10-10, 13:39-14:17). Cooked data stored in 20231010v1
+This script is used to prepare the data for training (real data, Ventana+LASS , 2023-10-10, 14:39-14:59). Cooked data stored in 20231010v2
 
 A few things to note:
 1. The raw data is using NED-FRD convention, we need to convert it to ENU-FLU convention. This includes the pose and the FLS images (fliplr).
@@ -35,13 +35,13 @@ import datetime
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--raw_data_base_dir', type=str, default="/root/Data/Gemini/LASS", help="where we keep the raw data")
+parser.add_argument('--raw_data_base_dir', type=str, default="/home/yxie/Data/Gemini/LASS", help="where we keep the raw data")
 parser.add_argument('--base_dir', type=str, default=".", help="where we keep the processed data ready for training")
 
-parser.add_argument('--nav_offset_easting', type=float, default=584690 , help="navigation offset (easting) initial estimation for the heightmap, in meters")
-parser.add_argument('--nav_offset_northing', type=float, default=4067258 , help="navigation offset (nothing) initial estimation for the heightmap, in meters")
-parser.add_argument('--nav_offset_northing_best', type=float, default=2 , help="navigation offset (easting) after alignment for the heightmap, in meters")
-parser.add_argument('--nav_offset_easting_best', type=float, default=13 , help="navigation offset (nothing) after alignment for the heightmap, in meters")
+parser.add_argument('--nav_offset_easting', type=float, default=584288 , help="navigation offset (easting) initial estimation for the heightmap, in meters")
+parser.add_argument('--nav_offset_northing', type=float, default=4067839 , help="navigation offset (nothing) initial estimation for the heightmap, in meters")
+parser.add_argument('--nav_offset_northing_best', type=float, default=-10 , help="navigation offset (easting) after alignment for the heightmap, in meters")
+parser.add_argument('--nav_offset_easting_best', type=float, default=15 , help="navigation offset (nothing) after alignment for the heightmap, in meters")
 parser.add_argument('--res', type=float, default=0.1 , help="res for the heightmap, in meters")
 parser.add_argument('--res_gt', type=float, default=0.05 , help="res for the gt heightmap, in meters")
 
@@ -59,9 +59,9 @@ skip_step = args.skip_step
 
 
 header=  "#utime,Northing,Easting,Depth,Roll,Pitch,Heading,Latitude,Longitude,Height"
-nav_file = raw_data_base_dir + os.sep + "20231010v1/img_navdata.txt"
-clean_nav_file = raw_data_base_dir + os.sep + "20231010v1/img_navdata_clean.csv"
-img_meta_file = raw_data_base_dir + os.sep + "20231010v1/imgs/img-meta.csv"
+nav_file = raw_data_base_dir + os.sep + "20231010v2/img_navdata.csv"
+clean_nav_file = raw_data_base_dir + os.sep + "20231010v2/img_navdata_clean.csv"
+img_meta_file = raw_data_base_dir + os.sep + "20231010v2/imgs/img-meta.csv"
 nav_corrected_file = raw_data_base_dir + os.sep + "20231010v1/nav_navadj_20231010_survey_fls.npz"
 nav_corrected_data=np.load(nav_corrected_file, allow_pickle=True)["nav_adj"].item()
 # dict_keys(['t', 'lat', 'lon', 'dep', 'hdg', 'pit', 'rol', 'utm_e', 'utm_n'])
@@ -73,8 +73,8 @@ with open(img_meta_file, "r") as f:
 print("img_meta ", img_meta[0])
 print("img_meta ", img_meta[1])   
 
-with open(nav_file, "r") as f:
-   my_data=f.readlines()
+# with open(nav_file, "r") as f:
+#    my_data=f.readlines()
 
 # print(len(my_data), my_data[6])
 # my_data_clean = []
@@ -105,7 +105,7 @@ print(UTIME[0])
 
 UTIME_offset = 315558000000000
 for i in range(0, len(UTIME)):
-    filename = glob.glob(raw_data_base_dir + os.sep + "20231010v1/imgs/"+str(UTIME[i]-UTIME_offset)+".png")
+    filename = glob.glob(raw_data_base_dir + os.sep + "20231010v2/imgs/"+str(UTIME[i]-UTIME_offset)+".png")
     # print(len(filename), filename)
     assert len(filename)==1
 
@@ -160,8 +160,8 @@ print("dep",nav_corrected_data["dep"][idx_start-1], nav_corrected_data["dep"][id
 print("hdg",nav_corrected_data["hdg"][idx_start-1],nav_corrected_data["hdg"][idx_start],nav_corrected_data["hdg"][idx_start+1], H[0]/math.pi*180)
 print("utm_x",nav_corrected_data["utm_e"][idx_start-1],nav_corrected_data["utm_e"][idx_start],nav_corrected_data["utm_e"][idx_start+1], Y[0])
 print("utm_n",nav_corrected_data["utm_n"][idx_start-1],nav_corrected_data["utm_n"][idx_start],nav_corrected_data["utm_n"][idx_start+1], X[0])
-print("pit",nav_corrected_data["pit"][idx_start-1],nav_corrected_data["pit"][idx_start],nav_corrected_data["pit"][idx_start+1], X[0])
-print("rol",nav_corrected_data["rol"][idx_start-1],nav_corrected_data["rol"][idx_start],nav_corrected_data["rol"][idx_start+1], X[0])
+print("pit",nav_corrected_data["pit"][idx_start-1],nav_corrected_data["pit"][idx_start],nav_corrected_data["pit"][idx_start+1])
+print("rol",nav_corrected_data["rol"][idx_start-1],nav_corrected_data["rol"][idx_start],nav_corrected_data["rol"][idx_start+1])
 plt.figure()
 plt.plot(UTIME/1e6,Z,label='Z')
 plt.plot(nav_corrected_data["t"][idx_start:idx_end], nav_corrected_data["dep"][idx_start:idx_end],label='dep')
@@ -184,10 +184,10 @@ PC = np.array((X_ENU[~np.isnan(ALTITUDE)],Y_ENU[~np.isnan(ALTITUDE)],Z_ENU[~np.i
 
 coarse_search = 0
 fine_search = 0
-
 if coarse_search:
     # register the map to trajectory using altitude
     ### coarse search
+    print("################coarse_search################")
     nav_offset_easting_init =0
     nav_offset_northing_init = 0
     error_min = np.inf
@@ -237,21 +237,22 @@ if coarse_search:
     nav_offset_northing_best,  nav_offset_easting_best = list(STD.keys())[least_std_idx]
     tide_offset = mean_all[least_std_idx]
     print("tide_offset", tide_offset)
-    print("best northing, easting based on std, std: ", nav_offset_northing_best, nav_offset_easting_best, std_all[least_std_idx])
+    print("best northing, easting based on std, std: ", nav_offset_northing_best, nav_offset_easting_best, std_all[least_std_idx]) # 0.14254242420853142
 
-    np.save("ERROR.npy", ERROR)
-    print("saved ERROR.npy")
+    # np.save("ERROR.npy", ERROR)
+    # print("saved ERROR.npy")
 if fine_search:
     # register the map to trajectory using altitude
     ### fine search
-    nav_offset_easting_init =0
-    nav_offset_northing_init = 0
+    print("################fine_search################")
+    nav_offset_easting_init = 15
+    nav_offset_northing_init = -10
     error_min = np.inf
     ERROR = {}
-    nav_offset_northing_best = 13
-    nav_offset_easting_best = 2
-    for nav_offset_northing in np.arange(nav_offset_northing_init+nav_offset_northing_best-3, nav_offset_northing_init+nav_offset_northing_best+3, 0.05):
-        for nav_offset_easting in np.arange(nav_offset_easting_init+nav_offset_easting_best-3, nav_offset_easting_init+nav_offset_easting_best+3, 0.05):
+    nav_offset_northing_best = -10
+    nav_offset_easting_best = 15
+    for nav_offset_northing in np.arange(nav_offset_northing_init-3, nav_offset_northing_init+3, 0.1):
+        for nav_offset_easting in np.arange(nav_offset_easting_init-3, nav_offset_easting_init+3, 0.1):
             error =0
             ERROR[(nav_offset_northing, nav_offset_easting)]=[]
             # check if the xy alignmnet is correct
@@ -277,7 +278,7 @@ if fine_search:
     for (n,e) in STD.keys():
         std_all.append(STD[(n,e)])
         mean_all.append(np.mean(ERROR[(n,e)]))
-        
+    plt.figure()
     plt.scatter(np.arange(len(std_all)), std_all,s=1, label="std")
     plt.title("std")
 
@@ -292,16 +293,16 @@ if fine_search:
     print(list(STD.keys())[least_std_idx], mean_all[least_std_idx], std_all[least_std_idx])
     nav_offset_northing_best,  nav_offset_easting_best = list(STD.keys())[least_std_idx]
     print("best northing, easting based on std, std: ", nav_offset_northing_best, nav_offset_easting_best, std_all[least_std_idx])
-    print("tide_offset", tide_offset)
 
     tide_offset = mean_all[least_std_idx]
+    print("tide_offset", tide_offset)
     np.save("ERROR.npy", ERROR)
     print("saved ERROR.npy")
 
 else:
-    nav_offset_easting_best = 13#12.75#13
-    nav_offset_northing_best = 2#1.9#2
-    tide_offset=-1.750100283526973#-1.732#-1.75
+    nav_offset_easting_best = 15#14.6
+    nav_offset_northing_best = -10#-9.4
+    tide_offset=-1.8079823097998027#-1.855277050535882
 
 X_ENU = np.copy(Y) +nav_offset_easting_best# Easting
 Y_ENU = np.copy(X) +nav_offset_northing_best# Northing
@@ -337,15 +338,15 @@ plt.xlabel("Easting (m)")
 plt.ylabel("Northing (m)")
 plt.imshow(heightmap_gt, origin="lower", cmap='turbo', extent=[map_offset_easting,map_offset_easting+heightmap_gt.shape[1]*res_gt, map_offset_northing, map_offset_northing+heightmap_gt.shape[0]*res_gt])
 
-x_min, x_max = (584214+nav_offset_easting_best, 584314+nav_offset_easting_best) # East
-y_min, y_max = (4067821+nav_offset_northing_best, 4067921+nav_offset_northing_best)# North
+x_min, x_max = (584230+nav_offset_easting_best, 584330+nav_offset_easting_best) # East
+y_min, y_max = (4067780+nav_offset_northing_best, 4067880+nav_offset_northing_best)# North
 
 print("x_min, x_max", x_min, x_max)
 print("y_min, y_max", y_min, y_max)
 
 plt.xlim(x_min, x_max)
 plt.ylim(y_min, y_max)
-# plt.show()
+plt.show()
 
 
 
@@ -396,7 +397,7 @@ PC_new = np.array((X_ENU[~np.isnan(ALTITUDE)],Y_ENU[~np.isnan(ALTITUDE)],Z_ENU[~
 
 print('here' ,len(UTIME))
 
-to_folder = base_dir + os.sep + "data/Gemini_lass"
+to_folder = base_dir + os.sep + "data/Gemini_lass2"
 if not os.path.exists(to_folder):
     os.makedirs(to_folder)
 
@@ -404,7 +405,7 @@ to_folder_img = to_folder+os.sep+"Data"
 if not os.path.exists(to_folder_img):
     os.makedirs(to_folder_img)
 
-vis_folder  = base_dir + os.sep + "Gemini_lass_images/"
+vis_folder  = base_dir + os.sep + "Gemini_lass2_images/"
 if not os.path.exists(vis_folder):
     os.makedirs(vis_folder)
 
@@ -425,7 +426,7 @@ valid_mask_heightmap = np.zeros(( int((x_max-x_min)/res)//1, int((y_max-y_min)/r
 valid_mask_heightmap_cnt = np.zeros(( int((x_max-x_min)/res)//1, int((y_max-y_min)/res)//1))
 for i in range(0, len(UTIME)):
     step = 1
-    filename = glob.glob(raw_data_base_dir+os.sep+"20231010v1/imgs/"+str(UTIME[i]-UTIME_offset)+".png")
+    filename = glob.glob(raw_data_base_dir+os.sep+"20231010v2/imgs/"+str(UTIME[i]-UTIME_offset)+".png")
     # print(len(filename), filename)
     assert len(filename)==1
     if i%skip_step==0:
