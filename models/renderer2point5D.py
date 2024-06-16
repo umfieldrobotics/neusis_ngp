@@ -223,12 +223,12 @@ class NeuSRenderer:
 
         intensityPointsOnArc = sampled_color[:, :, self.ray_n_samples-1]
 
-        if color_network.beamform_k_azimuth.requires_grad:
+        if color_network.beamform_k_elevation.requires_grad:
             intensityPointsOnArc = intensityPointsOnArc*beamform_elevation
 
         summedIntensities = (intensityPointsOnArc*weights).sum(dim=1)
 
-        if color_network.beamform_k_elevation.requires_grad:
+        if color_network.beamform_k_azimuth.requires_grad: 
             summedIntensities = summedIntensities *beamform_azimuth
 
         # Eikonal loss
