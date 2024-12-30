@@ -43,7 +43,7 @@ ENV DEPS_DIR=/root/deps
 WORKDIR ${DEPS_DIR}
 
 ARG NUM_THREADS=6
-ARG READ_TOKEN
+# ARG READ_TOKEN
 
 # Clone, build, and install OpenCV @ 4.2.0
 # RUN git clone https://github.com/opencv/opencv.git && \
@@ -73,7 +73,7 @@ WORKDIR /root/repos
 
 
 # Clone and install the packages and tcnn
-RUN git clone https://${READ_TOKEN}:x-oauth-basic@github.com/xyp8023/neusis_ngp.git && \
+RUN git clone git@github.com:xyp8023/neusis_ngp.git && \
     cd neusis_ngp && \
     pip install -r requirements.txt && \
     pip install git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch

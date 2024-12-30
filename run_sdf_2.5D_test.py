@@ -10,7 +10,6 @@ from tqdm import tqdm, trange
 import scipy.io
 import matplotlib.pyplot as plt
 from helpers import *
-from MLP import *
 #from PIL import Image
 # import cv2 as cv
 import time

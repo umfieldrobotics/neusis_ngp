@@ -3,7 +3,7 @@ import os
 import pickle 
 import json 
 import math
-from scipy.io import savemat
+# from scipy.io import savemat
 import numpy as np
 
 def load_data(target,base_dir="./",PC_name="PC.npy",heightmap_name="heightmap.npy"):
