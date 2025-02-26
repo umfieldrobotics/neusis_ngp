@@ -518,7 +518,7 @@ if __name__=='__main__':
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--conf', type=str, default="./confs/conf.conf")
-    parser.add_argument('--is_continue', default=False, action="store_true")
+    parser.add_argument('--is_continue', default=True, action="store_true")
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--PC_name', type=str, default="PC.npy")
     parser.add_argument('--heightmap_name', type=str, default="heightmap_gt.npy")
